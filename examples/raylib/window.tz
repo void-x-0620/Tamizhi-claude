@@ -1,0 +1,24 @@
+# A window with a rectangle that bounces left and right.
+#   tamizhi window.tz tz_raylib.c -lraylib -lm -lpthread -ldl -lGL -lX11 -o window
+serku "raylib.tzb";
+
+seyal main(): int {
+    init_window(800, 450, "Tamizhi + raylib");
+    set_fps(60);
+
+    edu x: i32 = 100;
+    edu dx: i32 = 4;
+
+    sutri (window_should_close() == 0) {
+        x += dx;
+        @(x < 0 || x > 700) aga irundha { dx = -dx; }
+
+        begin_drawing();
+        clear_background(30, 30, 40, 255);
+        draw_rect(x, 175, 100, 100, 230, 80, 80, 255);
+        draw_rect(350, 20, 100, 20, 80, 200, 120, 255);
+        end_drawing();
+    }
+    close_window();
+    kudu 0;
+}

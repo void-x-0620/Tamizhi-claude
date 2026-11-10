@@ -1,0 +1,15 @@
+serku "mylib.tzb";
+serku "raw.tzb";
+
+seyal main() : int {
+    pathi("%s\n", hello());
+    pathi("add(2, 3)      = %d\n", add(2, 3));
+    pathi("scale(2.5, 4)  = %.1f\n", scale(2.5, 4));
+    # argument evaluation order is unspecified (it is C's), so call one at a time
+    edu a : int = tick();
+    edu b : int = tick();
+    edu c : int = tick();
+    pathi("tick: %d %d %d\n", a, b, c);
+    pathi("twice(21)      = %d\n", twice(21));
+    kudu 0;
+}

@@ -1,0 +1,19 @@
+seyal risky(n: int): int {
+    @( n > 2 ) aga irundha { erivi "too big"; }
+    kudu n * 2;
+}
+seyal main(): int {
+    muyarchi { pathi("%d\n", risky(1)); pathi("%d\n", risky(5)); pathi("unreached\n"); }
+    pidi (e) { pathi("caught: %s\n", e); }
+    muyarchi {
+        muyarchi { erivi "inner"; } pidi (e) { pathi("a %s\n", e); erivi "outer"; }
+    } pidi (e) { pathi("b %s\n", e); }
+    edu xs = puthu List<int>();
+    muyarchi { xs.get(2); } pidi (e) { pathi("c %s\n", e); }
+    edu z = 0;
+    muyarchi { pathi("%d\n", 5 / z); } pidi (e) { pathi("d %s\n", e); }
+    ovvoru (edu i = 0; i < 3; i++) {
+        muyarchi { @( i == 1 ) aga irundha { thodar; } pathi("i=%d\n", i); } pidi (e) { }
+    }
+    erivi "final";
+}

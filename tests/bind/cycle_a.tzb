@@ -1,0 +1,4 @@
+# a.tzb and b.tzb include each other, and b.tzb includes this file again
+serku "cycle_b.tzb";
+veli "math.h";
+veli seyal root = sqrt(x : float) : float;

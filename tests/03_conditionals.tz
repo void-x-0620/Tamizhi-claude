@@ -1,0 +1,30 @@
+# if / else-if / else chains
+seyal grade(score : int) : int {
+    @(score >= 90) aga irundha {
+        pathi("A\n");
+    } ^(score >= 80) aga irundha {
+        pathi("B\n");
+    } ^(score >= 70) aga irundha {
+        pathi("C\n");
+    } ^(score >= 60) aga irundha {
+        pathi("D\n");
+    } illana {
+        pathi("F\n");
+    }
+    kudu 0;
+}
+
+seyal main() : int {
+    grade(95);
+    grade(82);
+    grade(71);
+    grade(65);
+    grade(40);
+
+    # logical operators, short-circuit
+    edu a : int = 5;
+    @(a > 1 && a < 10) aga irundha { pathi("in range\n"); }
+    @(a < 1 || a == 5) aga irundha { pathi("or works\n"); }
+    @(!(a == 5)) aga irundha { pathi("WRONG\n"); } illana { pathi("not works\n"); }
+    kudu 0;
+}

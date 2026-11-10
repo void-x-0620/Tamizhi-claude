@@ -1,0 +1,51 @@
+# Optimiser fixture: inspected via `tamizhi -S`, also run for correctness.
+seyal side() : int {
+    pathi("side effect\n");
+    kudu 1;
+}
+
+seyal main() : int {
+    edu a : int = 6 * 7;            # folded to 42
+    edu b : int = 100 - 58;         # folded to 42
+    edu c : int = a + 0;            # peephole -> a
+    edu d : int = 1 * b;            # peephole -> b
+    edu e : int = 0 * 999;          # folded to 0
+    pathi("%d %d %d %d %d\n", a, b, c, d, e);
+
+    edu nested : int = (2 + 3) * (4 + 5) - 1;     # folded to 44
+    pathi("nested = %d\n", nested);
+
+    # dead branch removed; the else becomes the whole statement
+    @(false) aga irundha {
+        pathi("NEVER-1\n");
+    } illana {
+        pathi("else kept\n");
+    }
+
+    # leading dead branch, live else-if survives as the first `if`
+    @(1 > 2) aga irundha {
+        pathi("NEVER-2\n");
+    } ^(a == 42) aga irundha {
+        pathi("else-if became if\n");
+    }
+
+    # constant-true branch ends the chain: later arms are unreachable
+    @(2 > 1) aga irundha {
+        pathi("always\n");
+    } illana {
+        pathi("NEVER-3\n");
+    }
+
+    sutri (false) { pathi("NEVER-4\n"); }
+
+    # short-circuit folding must not evaluate the right operand
+    @(false && side() == 1) aga irundha { pathi("NEVER-5\n"); }
+
+    # x*0 must NOT be removed when x has a side effect
+    edu z : int = side() * 0;
+    pathi("z = %d\n", z);
+
+    # unreachable code after kudu is dropped
+    kudu 0;
+    pathi("NEVER-6\n");
+}

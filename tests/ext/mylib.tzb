@@ -1,0 +1,5 @@
+veli "mylib.h";                       # found next to this file
+veli seyal add     = my_add(a : int, b : int) : int;
+veli seyal scale   = my_scale(x : float, k : float) : float;
+veli seyal hello   = my_greeting() : string;
+veli seyal tick    = my_counter_next() : int;

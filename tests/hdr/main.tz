@@ -1,0 +1,9 @@
+serku "mathx.tzh";
+serku "shapes.tzh";          # already included through mathx.tzh: ignored
+seyal main(): int {
+    edu p = Point { x: 3, y: 4 };
+    edu c = puthu Counter();
+    c.inc();
+    pathi("%s %d %d %d\n", ORIGIN_NAME, area(p.x, p.y), perimeter(p.x, p.y), c.inc());
+    kudu 0;
+}

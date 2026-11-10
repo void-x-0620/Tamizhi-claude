@@ -1,0 +1,2 @@
+seyal f(a: int): int { @( a > 0 ) aga irundha { kudu 1; } }
+seyal main(): int { kudu f(1); }

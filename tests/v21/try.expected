@@ -1,0 +1,9 @@
+2
+caught: too big
+a inner
+b outer
+c list index 2 is out of range (length 0)
+d division by zero
+i=0
+i=2
+tests/v21/try.tz:18: uncaught error: final

@@ -1,0 +1,1 @@
+seyal f(): int { kudu 1; } seyal main(): int { thangu edu n = f(); kudu 0; }

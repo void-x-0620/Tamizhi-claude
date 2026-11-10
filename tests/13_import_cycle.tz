@@ -1,0 +1,7 @@
+# circular imports are harmless: every file is included at most once
+serku "bind/cycle_a.tzb";
+
+seyal main() : int {
+    pathi("root(81) = %.0f\n", root(81.0));
+    kudu 0;
+}

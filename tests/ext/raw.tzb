@@ -1,0 +1,3 @@
+# No header: Tamizhi emits the prototype itself, so use exact C types
+# (int is a 64-bit long long).
+veli seyal twice(n : int) : int;

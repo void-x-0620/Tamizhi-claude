@@ -1,0 +1,13 @@
+# Globals may be initialised from calls and from other globals; they are set
+# before main runs, in declaration order.
+seyal seven() : int { kudu 7; }
+
+edu base  : int   = seven();
+edu twice : int   = base * 2;
+edu ratio : float = 3;            # int promoted to float
+edu plain : int   = 40 + 2;       # still a C constant
+
+seyal main() : int {
+    pathi("%d %d %.1f %d\n", base, twice, ratio, plain);
+    kudu 0;
+}

@@ -1,0 +1,6 @@
+seyal main(): int {
+    edu a: int[3] = [1, 2, 3];
+    edu i = 0;
+    sutri (i < 5) { pathi("%d\n", a[i]); i++; }
+    kudu 0;
+}

@@ -1,0 +1,4 @@
+seyal add(a : int, b : int) : int { kudu a + b; }
+seyal main() : int {
+    kudu add(1);
+}

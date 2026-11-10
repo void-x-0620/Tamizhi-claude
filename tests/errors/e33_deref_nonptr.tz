@@ -1,0 +1,1 @@
+seyal main(): int { edu x = 3; edu y = *x; kudu 0; }

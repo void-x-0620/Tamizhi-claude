@@ -1,0 +1,49 @@
+# kattamaipu (struct): nested structs declared out of order, passed by value
+kattamaipu Line {
+    start : Point;
+    stop  : Point;
+}
+
+kattamaipu Point {
+    x : int;
+    y : int;
+}
+
+kattamaipu Rectangle {
+    width  : int;
+    height : int;
+    tag    : string;
+}
+
+seyal area(r : Rectangle) : int { kudu r.width * r.height; }
+seyal perimeter(r : Rectangle) : int { kudu 2 * (r.width + r.height); }
+
+seyal manhattan(l : Line) : int {
+    edu dx : int = l.stop.x - l.start.x;
+    edu dy : int = l.stop.y - l.start.y;
+    @(dx < 0) aga irundha { dx = -dx; }
+    @(dy < 0) aga irundha { dy = -dy; }
+    kudu dx + dy;
+}
+
+seyal main() : int {
+    edu p : Point;                 # zero-initialised
+    pathi("Point: (%d, %d)\n", p.x, p.y);
+    p.x = 3;
+    p.y = 4;
+    pathi("Point: (%d, %d)\n", p.x, p.y);
+
+    edu r : Rectangle;
+    r.width = 10;
+    r.height = 5;
+    r.tag = "box";
+    pathi("%s %d x %d\n", r.tag, r.width, r.height);
+    pathi("area = %d, perimeter = %d\n", area(r), perimeter(r));
+
+    edu l : Line;
+    l.start.x = 1;
+    l.start.y = 9;
+    l.stop = p;
+    pathi("manhattan = %d\n", manhattan(l));
+    kudu 0;
+}

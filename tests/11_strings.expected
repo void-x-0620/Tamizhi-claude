@@ -1,0 +1,8 @@
+a == b
+a != c
+a < c
+Vanakkam! / vanakkam
+tab:[	] quote:["] backslash:[\] percent:[%]
+width:[    ab] left:[cd    ] char:[A]
+hex:ff padded:00042
+empty:[]

@@ -1,0 +1,6 @@
+kattamaipu Point { x : int; y : int; }
+seyal main() : int {
+    edu p : Point;
+    p.z = 1;
+    kudu 0;
+}

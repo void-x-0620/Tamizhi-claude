@@ -1,0 +1,2 @@
+# arrays cannot cross the C boundary
+veli seyal f(a : int[]) : int;

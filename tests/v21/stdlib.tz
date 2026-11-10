@@ -1,0 +1,9 @@
+serku "nool/all.tzh";
+seyal main(): int {
+    pathi("%s|%d|%s\n", str_upper("tamil"), str_find("hello", "ll"), str_trim("  hi  "));
+    pathi("%d %s\n", parse_int("42") + 1, int_to_str(7));
+    pathi("%.1f %d %d\n", sqrt(16.0), max(3, 9), abs(-4));
+    pathi("%s\n", str_replace("a-b-c", "-", "+"));
+    pathi("%d\n", str_len("vanakkam"));
+    kudu 0;
+}

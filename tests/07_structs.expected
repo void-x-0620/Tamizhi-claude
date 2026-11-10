@@ -1,0 +1,5 @@
+Point: (0, 0)
+Point: (3, 4)
+box 10 x 5
+area = 50, perimeter = 30
+manhattan = 7

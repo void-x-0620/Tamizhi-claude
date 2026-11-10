@@ -1,0 +1,4 @@
+seyal main() : int {
+    pathi("%d and %d\n", 1);
+    kudu 0;
+}

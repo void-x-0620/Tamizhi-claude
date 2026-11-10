@@ -1,0 +1,12 @@
+# C bindings for libm and a little of libc.
+#   veli "header";                              -> #include that header
+#   veli seyal <tamizhi name> = <C name>(...);   -> call C function under your own name
+# Put the header line first: functions below it trust the header's prototypes.
+veli "math.h";
+veli seyal root  = sqrt(x : float) : float;
+veli seyal power = pow(x : float, y : float) : float;
+veli seyal floor(x : float) : float;               # no alias: same name in both worlds
+
+veli "stdlib.h";
+veli seyal absolute = labs(n : int) : int;
+veli seyal toint    = atoi(s : string) : int;

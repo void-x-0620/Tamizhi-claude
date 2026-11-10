@@ -1,0 +1,7 @@
+vagupu P { pothu x: int; }
+seyal main(): int {
+    edu p: P = illai;
+    pathi("before\n");
+    pathi("%d\n", p.x);
+    kudu 0;
+}

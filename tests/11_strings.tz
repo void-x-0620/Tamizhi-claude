@@ -1,0 +1,24 @@
+# Strings: comparison lowers to strcmp (not pointer equality), escapes, format safety
+seyal greet(name : string, excited : bool) : string {
+    @(excited) aga irundha { kudu "Vanakkam!"; }
+    kudu "vanakkam";
+}
+
+seyal main() : int {
+    edu a : string = "tamil";
+    edu b : string = "tamil";
+    edu c : string = "tamizhi";
+
+    @(a == b) aga irundha { pathi("a == b\n"); }
+    @(a != c) aga irundha { pathi("a != c\n"); }
+    @(a < c)  aga irundha { pathi("a < c\n"); }
+
+    pathi("%s / %s\n", greet(a, true), greet(a, false));
+    pathi("tab:[\t] quote:[\"] backslash:[\\] percent:[%%]\n");
+    pathi("width:[%6s] left:[%-6s] char:[%c]\n", "ab", "cd", 65);
+    pathi("hex:%x padded:%05d\n", 255, 42);
+
+    edu empty : string;                # zero-initialised to ""
+    pathi("empty:[%s]\n", empty);
+    kudu 0;
+}

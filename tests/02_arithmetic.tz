@@ -1,0 +1,21 @@
+# Variables, arithmetic, precedence and %d normalisation
+seyal main() : int {
+    edu x : int = 10;
+    edu y : int = 3;
+
+    pathi("sum  = %d\n", x + y);
+    pathi("diff = %d\n", x - y);
+    pathi("prod = %lld\n", x * y);
+    pathi("quot = %d\n", x / y);
+    pathi("rem  = %d\n", x % y);
+
+    # precedence and associativity
+    pathi("prec = %d\n", 2 + 3 * 4 - 10 / 5);
+    pathi("left = %d\n", 100 - 30 - 20);
+    pathi("neg  = %d\n", -x + 4);
+
+    # inferred type
+    edu z = 6 * 7;
+    pathi("magic = %d\n", z);
+    kudu 0;
+}

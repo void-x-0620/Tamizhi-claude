@@ -1,0 +1,38 @@
+# pointers, pointer arithmetic, function pointers, callbacks in structs
+kattamaipu Ops { name: string; fn: seyal(int, int): int; }
+
+seyal add(a: int, b: int): int { kudu a + b; }
+seyal mul(a: int, b: int): int { kudu a * b; }
+seyal apply(f: seyal(int, int): int, x: int, y: int): int { kudu f(x, y); }
+seyal swap(a: int*, b: int*) { edu t = *a; *a = *b; *b = t; }
+seyal fill(p: int*, n: int) { ovvoru (edu i = 0; i < n; i++) { p[i] = i * i; } }
+
+seyal main(): int {
+    edu x = 1;  edu y = 2;
+    swap(&x, &y);
+    pathi("%d %d\n", x, y);
+
+    edu arr: int[5];
+    fill(&arr[0], 5);
+    edu p: int* = &arr[0];
+    p = p + 2;
+    pathi("%d %d %d\n", *p, p[1], maatru(p - &arr[0], int));
+    p++;
+    pathi("%d\n", *p);
+
+    pathi("%d %d\n", apply(add, 3, 4), apply(mul, 3, 4));
+    edu f: seyal(int, int): int = mul;
+    pathi("%d\n", f(5, 6));
+    edu table: Ops[2];
+    table[0] = Ops { name: "add", fn: add };
+    table[1] = Ops { name: "mul", fn: mul };
+    ovvoru (edu i = 0; i < 2; i++) { pathi("%s %d\n", table[i].name, table[i].fn(6, 7)); }
+
+    edu s = "hello";
+    pathi("%c %c\n", s[1], *s);
+    edu vp: void* = &x;
+    edu ip = maatru(vp, int*);
+    *ip = 77;
+    pathi("%d\n", x);
+    kudu 0;
+}

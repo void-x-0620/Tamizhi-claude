@@ -1,0 +1,16 @@
+# Calling C through a binding file. The binding is included once, at the top.
+serku "bind/cmath.tzb";
+serku "bind/cmath.tzb";          # a second include of the same file is ignored
+
+seyal main() : int {
+    pathi("root(144)    = %.1f\n", root(144.0));
+    pathi("power(2, 10) = %.0f\n", power(2.0, 10.0));
+    pathi("floor(3.9)   = %.1f\n", floor(3.9));
+    pathi("absolute(-7) = %d\n", absolute(-7));
+    pathi("toint(\"42\") + 1 = %d\n", toint("42") + 1);
+
+    # C results are ordinary values
+    edu hyp : float = root(power(3.0, 2.0) + power(4.0, 2.0));
+    pathi("hypotenuse   = %.1f\n", hyp);
+    kudu 0;
+}

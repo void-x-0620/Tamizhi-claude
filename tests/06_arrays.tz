@@ -1,0 +1,40 @@
+# Arrays: literals, sized arrays (zero-initialised), passing to functions
+seyal sum_array(arr : int[], len : int) : int {
+    edu total : int = 0;
+    edu i : int = 0;
+    sutri (i < len) { total = total + arr[i]; i = i + 1; }
+    kudu total;
+}
+
+seyal max_array(arr : int[], len : int) : int {
+    edu m : int = arr[0];
+    edu i : int = 1;
+    sutri (i < len) {
+        @(arr[i] > m) aga irundha { m = arr[i]; }
+        i = i + 1;
+    }
+    kudu m;
+}
+
+seyal main() : int {
+    edu nums : int[] = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3];
+    pathi("sum = %d\n", sum_array(nums, 10));
+    pathi("max = %d\n", max_array(nums, 10));
+
+    nums[0] = 100;
+    pathi("nums[0] = %d\n", nums[0]);
+
+    # sized array without initialiser is zero-filled
+    edu buf : int[4];
+    pathi("buf = %d %d %d %d\n", buf[0], buf[1], buf[2], buf[3]);
+    buf[2] = 7;
+    pathi("buf[2] = %d\n", buf[2]);
+
+    # partial initialiser: the remainder is zero
+    edu part : int[5] = [1, 2];
+    pathi("part sum = %d\n", sum_array(part, 5));
+
+    edu fl : float[] = [1.5, 2.5];
+    pathi("fl = %.1f\n", fl[0] + fl[1]);
+    kudu 0;
+}

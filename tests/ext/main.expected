@@ -1,0 +1,5 @@
+hello from C
+add(2, 3)      = 5
+scale(2.5, 4)  = 10.0
+tick: 1 2 3
+twice(21)      = 42

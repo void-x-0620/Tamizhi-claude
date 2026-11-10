@@ -1,0 +1,6 @@
+# Hello World — including UTF-8 Tamil text passing through unchanged
+seyal main() : int {
+    pathi("Vanakkam, Ulagam!\n");
+    pathi("வணக்கம்\n");
+    kudu 0;
+}

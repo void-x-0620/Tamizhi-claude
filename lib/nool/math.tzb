@@ -1,0 +1,17 @@
+# nool/math.tzb — Tamizhi standard library: math functions
+veli "tz_std.h";
+veli seyal sqrt  = tz_sqrt(x : float) : float;
+veli seyal pow   = tz_pow(x : float, y : float) : float;
+veli seyal sin   = tz_sin(x : float) : float;
+veli seyal cos   = tz_cos(x : float) : float;
+veli seyal tan   = tz_tan(x : float) : float;
+veli seyal log   = tz_log(x : float) : float;
+veli seyal exp   = tz_exp(x : float) : float;
+veli seyal floor = tz_floor(x : float) : float;
+veli seyal ceil  = tz_ceil(x : float) : float;
+veli seyal round = tz_round(x : float) : float;
+veli seyal fabs  = tz_fabs(x : float) : float;
+veli seyal abs   = tz_abs(x : int) : int;
+veli seyal min   = tz_min(a : int, b : int) : int;
+veli seyal max   = tz_max(a : int, b : int) : int;
+veli seyal pi    = tz_pi() : float;

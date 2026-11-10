@@ -1,0 +1,46 @@
+# every C arithmetic type, nilai / thangu / maaridum, casts, sizeof
+peyar Byte = u8;
+nilai edu LIMIT: int = 10;
+thangu edu hits = 0;
+maaridum edu flag: int = 1;
+
+thangu seyal bump(): int {
+    thangu edu calls = 0;     # keeps its value between calls
+    calls++;
+    kudu calls;
+}
+
+seyal main(): int {
+    edu a: i8 = -5;      edu b: u8 = 250;     edu c: i16 = -300;   edu d: u16 = 60000;
+    edu e: i32 = -70000; edu f: u32 = 4000000000;
+    edu g: i64 = -5000000000;  edu h: u64 = 18446744073709551615;
+    edu i: char = 'z';   edu j: uchar = 200;  edu k: short = 7;  edu l: ushort = 9;
+    edu m: uint = 11;    edu n: long = 12;    edu o: ulong = 13;
+    edu p: usize = alavu(i64);  edu q: isize = -1;
+    edu r: f32 = 1.5;    edu s: f64 = 2.25;   edu t: ldouble = 3.5;
+    edu bt: Byte = 255;
+    pathi("%d %d %d %d %d %u %d %u\n", a, b, c, d, e, f, g, h);
+    pathi("%c %d %d %d %u %d %d %d %d\n", i, j, k, l, m, n, o, p, q);
+    pathi("%f %f %f %d\n", r, s, t, bt);
+
+    # arithmetic follows C's usual conversions
+    edu sum = a + b;                # i32
+    edu mix = r * 2;                # f32
+    edu wide = maatru(f, u64) * 2;
+    pathi("%d %f %u\n", sum, mix, wide);
+
+    # narrowing needs maatru
+    edu big: int = 70000;
+    edu small = maatru(big, i16);
+    edu trunc = maatru(3.99, int);
+    pathi("%d %d\n", small, trunc);
+
+    pathi("%d %d %d %d\n", alavu(i8), alavu(i16), alavu(i32), alavu(i64));
+    pathi("%d %d\n", alavu(f32), alavu(ldouble) >= 8);
+
+    bump(); bump();
+    pathi("%d %d %d\n", bump(), LIMIT, flag);
+    hits += 3;
+    pathi("%d\n", hits);
+    kudu 0;
+}

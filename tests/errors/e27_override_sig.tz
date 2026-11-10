@@ -1,0 +1,1 @@
+vagupu A { seyal f(): int { kudu 1; } } vagupu B : A { seyal f(): string { kudu "s"; } } seyal main(): int { kudu 0; }

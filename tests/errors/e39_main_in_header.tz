@@ -1,0 +1,2 @@
+serku "has_main.tzh";
+seyal main(): int { kudu 0; }

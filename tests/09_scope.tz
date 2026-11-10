@@ -1,0 +1,40 @@
+# Block scoping and shadowing
+edu g : int = 100;
+
+seyal outer(x : int) : int {
+    edu result : int = x * 2;
+    @(x > 5) aga irundha {
+        edu local : int = x + 10;     # visible only inside this block
+        result = result + local;
+    }
+    kudu result;
+}
+
+seyal counter() : int {
+    edu count : int = 0;
+    edu i : int = 0;
+    sutri (i < 10) {
+        @(i % 2 == 0) aga irundha { count = count + 1; }
+        i = i + 1;
+    }
+    kudu count;
+}
+
+seyal shadow() : int {
+    edu g : int = 5;                  # shadows the global
+    {
+        edu g : int = 7;              # shadows again in an inner block
+        pathi("inner g = %d\n", g);
+    }
+    pathi("outer g = %d\n", g);
+    kudu g;
+}
+
+seyal main() : int {
+    pathi("outer(3) = %d\n", outer(3));
+    pathi("outer(8) = %d\n", outer(8));
+    pathi("counter() = %d\n", counter());
+    shadow();
+    pathi("global g = %d\n", g);
+    kudu 0;
+}

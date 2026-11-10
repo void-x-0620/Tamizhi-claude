@@ -1,0 +1,37 @@
+# Recursion, mutual recursion (forward references) and a global variable
+edu calls : int = 0;
+
+seyal fib(n : int) : int {
+    calls = calls + 1;
+    @(n <= 1) aga irundha { kudu n; }
+    kudu fib(n - 1) + fib(n - 2);
+}
+
+seyal factorial(n : int) : int {
+    @(n <= 1) aga irundha { kudu 1; }
+    kudu n * factorial(n - 1);
+}
+
+seyal is_even(n : int) : bool {
+    @(n == 0) aga irundha { kudu true; }
+    kudu is_odd(n - 1);
+}
+
+seyal is_odd(n : int) : bool {
+    @(n == 0) aga irundha { kudu false; }
+    kudu is_even(n - 1);
+}
+
+seyal main() : int {
+    edu i : int = 0;
+    sutri (i < 10) { pathi("%d ", fib(i)); i = i + 1; }
+    pathi("\n");
+
+    edu j : int = 1;
+    sutri (j <= 7) { pathi("%d ", factorial(j)); j = j + 1; }
+    pathi("\n");
+
+    pathi("even(10)=%d odd(7)=%d even(7)=%d\n", is_even(10), is_odd(7), is_even(7));
+    pathi("fib was called %d times\n", calls);
+    kudu 0;
+}

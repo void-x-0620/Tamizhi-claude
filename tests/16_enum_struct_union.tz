@@ -1,0 +1,48 @@
+pattiyal Color { Red, Green = 5, Blue }
+pattiyal Level { Low = 1 << 0, Mid = 1 << 3, High = Level.Mid * 2 }
+kattamaipu Point { x: int; y: int; }
+kattamaipu Line { a: Point; b: Point; tag: string; }
+kattamaipu Node { val: int; next: Node*; }
+inaippu Word { i: i32; f: f32; raw: u8[4]; }
+peyar Grid = int[2][3];
+
+seyal name(c: Color): string {
+    thervu (c) {
+        vazhakku Color.Red:   { kudu "red"; }
+        vazhakku Color.Green: { kudu "green"; }
+        iyalbu:               { kudu "blue"; }
+    }
+    kudu "?";
+}
+
+seyal main(): int {
+    edu c = Color.Blue;
+    pathi("%s %d %d %d\n", name(c), c, Level.High, maatru(Color.Green, int) + 1);
+    edu back: Color = maatru(5, Color);
+    pathi("%s\n", name(back));
+
+    edu p = Point { x: 3, y: 4 };
+    edu ln = Line { a: p, b: Point { x: 7 }, tag: "diag" };
+    ln.b.y = 9;
+    pathi("%d %d %d %d %s\n", ln.a.x, ln.a.y, ln.b.x, ln.b.y, ln.tag);
+
+    # linked structures through pointers
+    edu n3: Node = Node { val: 3 };
+    edu n2: Node = Node { val: 2, next: &n3 };
+    edu n1: Node = Node { val: 1, next: &n2 };
+    edu cur: Node* = &n1;
+    edu total = 0;
+    sutri (cur != illai) { total += cur.val; cur = cur.next; }
+    pathi("%d\n", total);
+
+    edu w: Word;
+    w.i = 0x01020304;
+    pathi("%d %d\n", w.raw[0], alavu(Word));
+    w.f = 1.0;
+    pathi("%f\n", w.f);
+
+    edu g: Grid;
+    ovvoru (edu i = 0; i < 3; i++) { g[1][i] = i * 10; }
+    pathi("%d %d\n", g[1][2], alavu(g));
+    kudu 0;
+}

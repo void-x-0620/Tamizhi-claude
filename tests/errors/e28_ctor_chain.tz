@@ -1,0 +1,1 @@
+vagupu A { uruvaakku(n: int) { } } vagupu B : A { } seyal main(): int { kudu 0; }

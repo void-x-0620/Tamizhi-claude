@@ -1,0 +1,13 @@
+# Binaries
+tamizhi
+tamizhi-asan
+a.out
+
+# Object files
+*.o
+
+# Temporary files
+*.tmp
+*.s
+/tmp/
+

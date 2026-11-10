@@ -1,0 +1,2 @@
+serku "bad_dup.tzb";
+seyal main() : int { kudu 0; }

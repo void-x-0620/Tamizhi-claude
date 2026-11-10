@@ -1,0 +1,16 @@
+# raylib.tzb — minimal raylib binding for Tamizhi (window + rectangle).
+#
+# raylib passes colours as a C struct (Color), which a Tamizhi binding cannot
+# pass by value, so tz_raylib.c wraps the calls and takes r, g, b, a as plain
+# numbers. Use it from your program with:   serku "raylib.tzb";
+veli "tz_raylib.h";                    # found next to this file
+
+veli seyal init_window         = tz_init_window(w : i32, h : i32, title : string);
+veli seyal close_window        = tz_close_window();
+veli seyal window_should_close = tz_window_should_close() : i32;
+veli seyal set_fps             = tz_set_fps(fps : i32);
+veli seyal begin_drawing       = tz_begin_drawing();
+veli seyal end_drawing         = tz_end_drawing();
+veli seyal clear_background    = tz_clear_background(r : i32, g : i32, b : i32, a : i32);
+veli seyal draw_rect           = tz_draw_rect(x : i32, y : i32, w : i32, h : i32,
+                                              r : i32, g : i32, b : i32, a : i32);

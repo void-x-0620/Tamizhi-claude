@@ -1,0 +1,4 @@
+1
+2
+3
+tests/rt/bounds.tz:4: runtime error: index 3 is out of bounds for an array of 3

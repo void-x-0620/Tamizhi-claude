@@ -1,0 +1,4 @@
+seyal name() : int {
+    kudu "tamil";
+}
+seyal main() : int { kudu 0; }

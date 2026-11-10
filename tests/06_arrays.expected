@@ -1,0 +1,7 @@
+sum = 39
+max = 9
+nums[0] = 100
+buf = 0 0 0 0
+buf[2] = 7
+part sum = 3
+fl = 4.0

@@ -1,0 +1,2 @@
+serku "bad_header.tzh";
+seyal main(): int { kudu 0; }

@@ -1,0 +1,21 @@
+# Floats, int -> float promotion, and float formatting
+seyal circle_area(r : float) : float {
+    edu pi : float = 3.14159265358979;
+    kudu pi * r * r;
+}
+
+seyal main() : int {
+    edu a : float = 1.5;
+    edu b : float = 2.5;
+    pathi("a + b = %.2f\n", a + b);
+    pathi("a * b = %.2f\n", a * b);
+
+    edu cf : float = 2.0 * 3.0 + 1.0;
+    pathi("2.0*3.0+1.0 = %.1f\n", cf);
+
+    edu whole : float = 3;                 # int literal promoted
+    pathi("whole = %.1f\n", whole / 2);    # float division
+    pathi("area = %.4f\n", circle_area(5));  # int argument promoted
+    pathi("mixed = %5.1f|\n", 1 + 0.25);
+    kudu 0;
+}

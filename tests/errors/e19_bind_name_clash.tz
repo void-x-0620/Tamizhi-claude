@@ -1,0 +1,3 @@
+serku "../bind/cmath.tzb";
+seyal root(x : float) : float { kudu x; }
+seyal main() : int { kudu 0; }

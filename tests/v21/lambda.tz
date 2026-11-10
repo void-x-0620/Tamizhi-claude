@@ -1,0 +1,6 @@
+seyal apply(f: seyal(int, int): int, a: int, b: int): int { kudu f(a, b); }
+seyal main(): int {
+    edu add = seyal(x: int, y: int): int { kudu x + y; };
+    pathi("%d %d\n", apply(add, 2, 3), apply(seyal(x: int, y: int): int { kudu x * y; }, 4, 5));
+    kudu 0;
+}

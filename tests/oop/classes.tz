@@ -1,0 +1,47 @@
+# classes: fields, access control, constructors, inheritance, virtual methods,
+# thandhai (super), static members
+vagupu Animal {
+    pothu name: string;
+    maraivu age: int;
+    thangu count: int = 0;
+    uruvaakku(n: string, a: int) { ithu.name = n; ithu.age = a; Animal.count++; }
+    seyal speak(): string { kudu "..."; }
+    seyal describe(): string { kudu ithu.name + " says " + ithu.speak(); }
+    seyal getAge(): int { kudu ithu.age; }
+    thangu seyal total(): int { kudu Animal.count; }
+}
+vagupu Dog : Animal {
+    pothu tricks: int;
+    uruvaakku(n: string) { thandhai(n, 3); ithu.tricks = 2; }
+    seyal speak(): string { kudu "Woof"; }
+}
+vagupu Puppy : Dog {
+    uruvaakku(n: string) { thandhai(n); }
+    seyal speak(): string { kudu thandhai.speak() + "!"; }
+}
+vagupu Counter {
+    paathukaappu n: int;
+    seyal inc(): Counter { ithu.n++; kudu ithu; }
+    seyal get(): int { kudu ithu.n; }
+}
+
+seyal intro(a: Animal) { pathi("%s\n", a.describe()); }
+
+seyal main(): int {
+    edu a = puthu Animal("Generic", 5);
+    edu d = puthu Dog("Rex");
+    edu p: Animal = puthu Puppy("Bit");
+    intro(a); intro(d); intro(p);
+    pathi("%d %d %d\n", Animal.total(), d.getAge(), d.tricks);
+    edu animals: Animal[3];
+    animals[0] = a; animals[1] = d; animals[2] = p;
+    ovvoru (edu i = 0; i < 3; i++) { pathi("%s\n", animals[i].speak()); }
+    edu dd = maatru(animals[1], Dog);         # downcast
+    pathi("%d\n", dd.tricks);
+    edu c = puthu Counter();
+    pathi("%d\n", c.inc().inc().inc().get());
+    edu none: Dog = illai;
+    @(none == illai) aga irundha { pathi("null object\n"); }
+    @(p != illai && p != a) aga irundha { pathi("distinct\n"); }
+    kudu 0;
+}

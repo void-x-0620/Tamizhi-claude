@@ -1,0 +1,39 @@
+# while loops with udai (break) and thodar (continue)
+seyal main() : int {
+    edu i : int = 1;
+    sutri (i <= 5) {
+        pathi("%d ", i);
+        i = i + 1;
+    }
+    pathi("\n");
+
+    edu j : int = 0;
+    sutri (j < 10) {
+        j = j + 1;
+        @(j % 2 == 0) aga irundha { thodar; }
+        pathi("%d ", j);
+    }
+    pathi("\n");
+
+    edu k : int = 0;
+    sutri (true) {
+        k = k + 1;
+        @(k == 5) aga irundha { udai; }
+        pathi("%d ", k);
+    }
+    pathi("\n");
+
+    # nested loops: inner break only leaves the inner loop
+    edu a : int = 0;
+    sutri (a < 3) {
+        edu b : int = 0;
+        sutri (b < 10) {
+            @(b == 2) aga irundha { udai; }
+            pathi("(%d,%d) ", a, b);
+            b = b + 1;
+        }
+        a = a + 1;
+    }
+    pathi("\n");
+    kudu 0;
+}

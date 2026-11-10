@@ -1,0 +1,33 @@
+# List<T>, foreach, .length
+kattamaipu P { x: int; y: int; }
+seyal main(): int {
+    edu xs = puthu List<int>(3, 1, 2);
+    xs.push(9);
+    xs.insert(0, 7);
+    xs[1] = xs[1] + 100;
+    xs.set(2, 55);
+    edu sum = 0;
+    ovvoru (edu v ulle xs) { sum += v; }
+    pathi("len=%d sum=%d first=%d\n", xs.length, sum, xs.get(0));
+    edu last = xs.pop();
+    edu gone = xs.remove(0);
+    pathi("last=%d gone=%d len=%d\n", last, gone, xs.length);
+    xs.clear();
+    pathi("cleared=%d\n", xs.length);
+    edu ps = puthu List<P>();
+    ovvoru (edu i = 0; i < 3; i++) { ps.push(P { x: i, y: i * i }); }
+    ovvoru (edu p ulle ps) { pathi("(%d,%d) ", p.x, p.y); }
+    pathi("\n");
+    edu grid = puthu List<List<int>>();
+    ovvoru (edu r = 0; r < 3; r++) {
+        edu row = puthu List<int>();
+        ovvoru (edu c = 0; c < 3; c++) { row.push(r * c); }
+        grid.push(row);
+    }
+    pathi("%d %d\n", grid[2][2], grid.length);
+    edu arr: int[3] = [4, 5, 6];
+    ovvoru (edu a ulle arr) { pathi("%d ", a); }
+    ovvoru (edu ch ulle "ab") { pathi("%c-", ch); }
+    pathi("%d\n", "tamizhi".length);
+    kudu 0;
+}

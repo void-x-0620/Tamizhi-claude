@@ -1,0 +1,4 @@
+seyal main() : int {
+    edu s : string = "a" + 1;
+    kudu 0;
+}

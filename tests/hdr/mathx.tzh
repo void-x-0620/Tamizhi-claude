@@ -1,0 +1,3 @@
+# a header that includes another header
+serku "shapes.tzh";
+seyal perimeter(w: int, h: int): int { kudu 2 * (w + h); }

@@ -1,0 +1,6 @@
+seyal main(): int {
+    edu d = 0;
+    pathi("before\n");
+    pathi("%d\n", 10 / d);
+    kudu 0;
+}

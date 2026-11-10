@@ -1,0 +1,31 @@
+# String concatenation allocates on the heap.
+# a heap-allocated global, built before main runs
+edu banner : string = "ta" + "mil" + "izhi";
+
+seyal greet(name : string) : string {
+    kudu "Vanakkam, " + name + "!";
+}
+
+seyal main() : int {
+    pathi("%s\n", banner);
+    pathi("%s\n", greet("Sibi"));
+
+    edu s : string = "";
+    edu i : int = 0;
+    sutri (i < 5) {
+        s = s + "ab";
+        i = i + 1;
+    }
+    pathi("%s (%d)\n", s, 10);
+
+    @(greet("x") == "Vanakkam, x!") aga irundha { pathi("equal\n"); }
+
+    # churn: with a collector, memory stays flat; without one it grows
+    edu n : int = 0;
+    sutri (n < 300000) {
+        edu t : string = "item-" + "padding-padding-padding-padding-" + "end";
+        n = n + 1;
+    }
+    pathi("done\n");
+    kudu 0;
+}

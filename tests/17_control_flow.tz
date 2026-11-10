@@ -1,0 +1,42 @@
+# for / seithu-sutri / thervu / ?: / ++ -- / compound assignment / bit ops
+seyal main(): int {
+    edu s = 0;
+    ovvoru (edu i = 1; i <= 5; i++) { s += i; }
+    pathi("sum %d\n", s);
+
+    edu n = 3;
+    seithu { pathi("n=%d\n", n); n--; } sutri (n > 0);
+
+    ovvoru (edu i = 0; i < 10; i++) {
+        @(i % 2 == 0) aga irundha { thodar; }
+        @(i > 7) aga irundha { udai; }
+        pathi("odd %d\n", i);
+    }
+
+    ovvoru (edu k = 0; k < 4; k++) {
+        thervu (k) {
+            vazhakku 0:    { pathi("zero\n"); }
+            vazhakku 1, 2: { pathi("one-or-two\n"); }
+            iyalbu:        { pathi("many\n"); }
+        }
+    }
+
+    # udai inside thervu leaves only the switch
+    ovvoru (edu k = 0; k < 2; k++) {
+        thervu (k) { vazhakku 0: { @(k == 0) aga irundha { udai; } pathi("never\n"); } iyalbu: { pathi("k=%d\n", k); } }
+    }
+
+    edu x = 6;
+    x *= 7;  x -= 2;  x /= 4;  x %= 7;
+    pathi("%d\n", x);
+    edu b = 0xF0;
+    b |= 0x0F;  b &= 0x3C;  b ^= 0xFF;  b <<= 2;  b >>= 1;
+    pathi("%d %d %d\n", b, ~5, (6 & 3) | (1 << 4));
+    edu t = x > 2 ? 100 : 200;
+    pathi("%d\n", t);
+    edu i = 5;
+    i++;  ++i;  i--;
+    pathi("%d\n", i);
+    pathi("%d\n", 0b101 + 0o17);
+    kudu 0;
+}

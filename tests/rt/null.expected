@@ -1,0 +1,2 @@
+before
+tests/rt/null.tz:5: runtime error: null reference (illai) used

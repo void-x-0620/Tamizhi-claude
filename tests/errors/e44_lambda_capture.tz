@@ -1,0 +1,5 @@
+seyal main(): int {
+    edu k = 3;
+    edu f = seyal(x: int): int { kudu x + k; };
+    kudu 0;
+}

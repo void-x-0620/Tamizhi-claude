@@ -1,0 +1,20 @@
+moolam vagupu Shape {
+    nm: string;
+    uruvaakku(n: string) { ithu.nm = n; }
+    moolam seyal area(): float;
+    seyal show() { pathi("%s %.1f\n", ithu.nm, ithu.area()); }
+}
+vagupu Sq : Shape {
+    s: float;
+    uruvaakku(s: float) { thandhai("square"); ithu.s = s; }
+    seyal area(): float { kudu ithu.s * ithu.s; }
+}
+vagupu Circle : Shape {
+    uruvaakku() { thandhai("circle"); }
+    seyal area(): float { kudu 3.0; }
+}
+seyal main(): int {
+    edu shapes = puthu List<Shape>(puthu Sq(2.0), puthu Circle());
+    ovvoru (edu s ulle shapes) { s.show(); }
+    kudu 0;
+}

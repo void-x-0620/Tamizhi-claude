@@ -1,0 +1,1 @@
+a C binding can only use numeric types, string, bool and pointers

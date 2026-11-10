@@ -1,0 +1,6 @@
+outer(3) = 6
+outer(8) = 34
+counter() = 5
+inner g = 7
+outer g = 5
+global g = 100

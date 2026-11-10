@@ -1,0 +1,8 @@
+# shapes.tzh — a Tamizhi header: ordinary declarations
+kattamaipu Point { x: int; y: int; }
+nilai edu ORIGIN_NAME = "origin";
+seyal area(w: int, h: int): int { kudu w * h; }
+vagupu Counter {
+    paathukaappu n: int;
+    seyal inc(): int { ithu.n++; kudu ithu.n; }
+}

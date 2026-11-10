@@ -1,0 +1,4 @@
+0 1 1 2 3 5 8 13 21 34
+1 2 6 24 120 720 5040
+even(10)=1 odd(7)=1 even(7)=0
+fib was called 276 times

@@ -1,0 +1,1 @@
+seyal main(): int { edu a: i32 = 5; edu b: i16 = a; kudu 0; }

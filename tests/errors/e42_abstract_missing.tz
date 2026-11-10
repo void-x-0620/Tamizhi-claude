@@ -1,0 +1,3 @@
+moolam vagupu S { moolam seyal f(): int; }
+vagupu T : S { }
+seyal main(): int { kudu 0; }

@@ -1,0 +1,5 @@
+serku "../bind/cmath.tzb";
+seyal main() : int {
+    pathi("%f\n", root("nine"));
+    kudu 0;
+}

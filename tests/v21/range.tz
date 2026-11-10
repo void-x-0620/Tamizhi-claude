@@ -1,0 +1,8 @@
+seyal main(): int {
+    ovvoru (edu i ulle 0 .. 3) { pathi("%d ", i); }
+    edu xs = puthu List<int>(5, 6, 7);
+    ovvoru (edu j ulle 0..xs.length) { pathi("%d ", xs[j]); }
+    ovvoru (edu k ulle 1.5 .. 2.0) { pathi("[%.1f]", k); }
+    pathi("\n");
+    kudu 0;
+}

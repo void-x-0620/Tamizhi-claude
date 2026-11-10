@@ -1,0 +1,2 @@
+# binding files hold only veli declarations
+seyal f() : int { kudu 1; }
