@@ -1839,7 +1839,10 @@ static bool has_break(Node *n) {                    /* a udai that leaves this s
         case NK_IF:
             for (IfBranch *b = n->if_stmt.branches; b; b = b->next) if (has_break(b->body)) return true;
             return false;
-        case NK_TRY: return has_break(n->try_stmt.body) || has_break(n->try_stmt.catch_body);
+        case NK_TRY:
+            if (has_break(n->try_stmt.body) || has_break(n->try_stmt.finally_body)) return true;
+            for (Catch *c = n->try_stmt.catches; c; c = c->next) if (has_break(c->body)) return true;
+            return false;
         default: return false;                        /* nested loops / switches own their breaks */
     }
 }
@@ -1867,7 +1870,13 @@ static bool always_returns(Node *n) {
             return always_returns(n->while_stmt.body);
         case NK_FOR:
             return !n->for_stmt.cond && !has_break(n->for_stmt.body);
-        case NK_TRY: return always_returns(n->try_stmt.body) && always_returns(n->try_stmt.catch_body);
+        case NK_TRY: {
+            if (always_returns(n->try_stmt.finally_body)) return true;
+            if (!always_returns(n->try_stmt.body)) return false;
+            for (Catch *c = n->try_stmt.catches; c; c = c->next)
+                if (!always_returns(c->body)) return false;
+            return true;
+        }
         case NK_SWITCH: {
             bool def = false;
             for (SwitchCase *c = n->switch_stmt.cases; c; c = c->next) {
@@ -2417,18 +2426,28 @@ static void stmt(Sema *s, Node *n) {
 
         case NK_TRY:
             stmt(s, n->try_stmt.body);
-            scope_push(s);
-            if (n->try_stmt.catch_name)
-                declare(s, n->try_stmt.catch_name, SYM_VAR, &ty_string, n->line, n->col);
-            stmt(s, n->try_stmt.catch_body);
-            scope_pop(s);
+            for (Catch *c = n->try_stmt.catches; c; c = c->next) {
+                TypeInfo *ct = &ty_string;
+                if (c->type) {
+                    resolve_type(s, c->type, n->line, n->col);
+                    ct = c->type;
+                    if (!is_unknown(ct) && ct->kind != TY_STRING && ct->kind != TY_CLASS)
+                        report_error(s->filename, c->body->line, c->body->col,
+                                     "'pidi' catches a string or a class, not %s", type_str(s, ct));
+                }
+                scope_push(s);
+                if (c->name) declare(s, c->name, SYM_VAR, ct, n->line, n->col);
+                stmt(s, c->body);
+                scope_pop(s);
+            }
+            if (n->try_stmt.finally_body) stmt(s, n->try_stmt.finally_body);
             break;
 
         case NK_THROW: {
             TypeInfo *t = expr(s, n->throw_stmt.value);
-            if (!is_unknown(t) && t->kind != TY_STRING)
+            if (!is_unknown(t) && t->kind != TY_STRING && t->kind != TY_CLASS)
                 report_error(s->filename, n->line, n->col,
-                             "'erivi' throws a string message, not %s",
+                             "'erivi' throws a string message or an object, not %s",
                              type_str(s, t));
             break;
         }

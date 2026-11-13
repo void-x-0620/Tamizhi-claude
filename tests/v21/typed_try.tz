@@ -1,0 +1,49 @@
+vagupu Error {
+    msg: string;
+    uruvaakku(m: string) { ithu.msg = m; }
+}
+vagupu IOError : Error {
+    uruvaakku(m: string) { thandhai(m); }
+}
+vagupu ParseError : Error {
+    code: int;
+    uruvaakku(m: string, c: int) { thandhai(m); ithu.code = c; }
+}
+seyal pick(k: int) {
+    @( k == 0 ) aga irundha { erivi puthu IOError("disk"); }
+    @( k == 1 ) aga irundha { erivi puthu ParseError("bad", 7); }
+    @( k == 2 ) aga irundha { erivi "plain"; }
+}
+seyal classify(k: int) {
+    muyarchi { pick(k); pathi("none\n"); }
+    pidi (e: ParseError) { pathi("parse %s %d\n", e.msg, e.code); }
+    pidi (e: IOError) { pathi("io %s\n", e.msg); }
+    pidi (e: string) { pathi("str %s\n", e); }
+}
+seyal f1(): int {
+    muyarchi { kudu 1; } irudhi { pathi("fin1\n"); }
+    kudu 0;
+}
+seyal f2(): int {
+    muyarchi { erivi "x"; } pidi (e) { kudu 2; } irudhi { pathi("fin2\n"); }
+    kudu 0;
+}
+seyal main(): int {
+    classify(0); classify(1); classify(2); classify(3);
+    muyarchi { pick(1); } pidi (e: Error) { pathi("base %s\n", e.msg); }
+    muyarchi { pick(0); } pidi (e) { pathi("any %s\n", e); }
+    muyarchi {
+        muyarchi { pick(0); } pidi (e: ParseError) { pathi("wrong\n"); }
+    } pidi (e: IOError) { pathi("outer io\n"); }
+    pathi("%d\n", f1());
+    pathi("%d\n", f2());
+    ovvoru (edu i = 0; i < 3; i++) {
+        muyarchi { @( i == 1 ) aga irundha { thodar; } @( i == 2 ) aga irundha { udai; } pathi("body %d\n", i); }
+        irudhi { pathi("fin loop %d\n", i); }
+    }
+    muyarchi {
+        muyarchi { erivi "boom"; } irudhi { pathi("cleanup\n"); }
+    } pidi (e) { pathi("got %s\n", e); }
+    muyarchi { pathi("ok\n"); } irudhi { pathi("done\n"); }
+    erivi puthu ParseError("final", 1);
+}

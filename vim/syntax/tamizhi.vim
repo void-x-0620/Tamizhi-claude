@@ -13,7 +13,7 @@ syn keyword tzRepeat      sutri ovvoru seithu
 syn keyword tzSwitch      thervu
 syn keyword tzCase        vazhakku iyalbu
 syn keyword tzFlow        udai thodar
-syn keyword tzException   muyarchi pidi erivi
+syn keyword tzException   muyarchi pidi irudhi erivi
 syn keyword tzRepeat      ulle
 syn keyword tzReturn      kudu
 

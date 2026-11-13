@@ -43,6 +43,7 @@ typedef struct {
     bool        lines;       /* in:  emit #line directives for debuggers      */
     bool        uses_throw;  /* out: try/catch/throw needs the frame runtime  */
     int         try_depth, break_base, cont_base;   /* active try frames     */
+    Node       *fin[256];   /* finally block guarding each active frame level  */
     StrBuf      lists;       /* C definitions of the List<T> instances used    */
     int         nlists, nmaps;
     const char *map_keys[256];

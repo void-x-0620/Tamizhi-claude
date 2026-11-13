@@ -338,7 +338,27 @@ String methods (all return new strings; the original never changes):
 | `s.to_int()` `s.to_float()` | number (0 if the text is not a number) |
 | `list.join(sep)` | string, for a `List<string>` |
 
-## 13. Not supported (on purpose or yet)
+## 13. Version 2.6: typed exceptions and `finally`
+
+`erivi` throws a string or an object of any class. `pidi` can name the type it
+catches; clauses are tried in order and the first match wins. With no match the
+exception continues outwards.
+
+```
+muyarchi { ... }
+pidi (e: ParseError) { pathi("%s %d\n", e.msg, e.code); }  # class (or subclass)
+pidi (e: IOError)    { ... }
+pidi (e: string)     { ... }   # string throws and runtime errors
+pidi (e)             { ... }   # catch-all; e is a string (the class name for objects)
+irudhi { ... }                 # finally: always runs
+```
+
+- `irudhi` runs on normal exit, after a caught or uncaught exception, and on
+  `kudu`, `udai` and `thodar` leaving the block. It may be used without `pidi`.
+- An uncaught object prints `file:line: uncaught exception: ClassName`.
+- A `muyarchi` needs at least one `pidi` or an `irudhi`.
+
+## 14. Not supported (on purpose or yet)
 
 `goto`, bit-fields, the comma operator, inline assembly, interfaces, user generics, `finally`, constructor/method overloading, multiple inheritance, generics,
 pointer-to-const (`nilai` applies to the variable itself), `nilai` struct/class

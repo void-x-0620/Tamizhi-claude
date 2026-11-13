@@ -35,7 +35,7 @@ static const struct { const char *word; TokenType type; } KEYWORDS[] = {
     { "maraivu",    TOK_MARAIVU    }, { "paathukaappu", TOK_PAATHUKAAPPU },
     { "pothu",      TOK_POTHU      }, { "illai",      TOK_ILLAI      },
     { "maatru",     TOK_MAATRU     }, { "alavu",      TOK_ALAVU      },
-    { "muyarchi",   TOK_MUYARCHI   }, { "pidi",       TOK_PIDI       },
+    { "irudhi",     TOK_IRUDHI     }, { "muyarchi",   TOK_MUYARCHI   }, { "pidi",       TOK_PIDI       },
     { "erivi",      TOK_ERIVI      }, { "ulle",       TOK_ULLE       }, { "moolam",     TOK_MOOLAM     },
 };
 
@@ -433,6 +433,7 @@ const char *token_type_name(TokenType t) {
         case TOK_ILLAI: return "'illai'";
         case TOK_MUYARCHI: return "'muyarchi'";
         case TOK_PIDI: return "'pidi'";
+        case TOK_IRUDHI: return "'irudhi'";
         case TOK_ERIVI: return "'erivi'";
         case TOK_ULLE: return "'ulle'";
         case TOK_MOOLAM: return "'moolam'";

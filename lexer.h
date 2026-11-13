@@ -42,7 +42,7 @@ typedef enum {
     TOK_MARAIVU, TOK_PAATHUKAAPPU, TOK_POTHU,
     /* literals and operators spelled as words */
     TOK_ILLAI, TOK_MAATRU, TOK_ALAVU,
-    TOK_MUYARCHI, TOK_PIDI, TOK_ERIVI, TOK_ULLE, TOK_MOOLAM,        /* try / catch / throw */
+    TOK_MUYARCHI, TOK_PIDI, TOK_ERIVI, TOK_ULLE, TOK_MOOLAM, TOK_IRUDHI,        /* try / catch / throw */
 
     TOK_EOF, TOK_ERROR,
 } TokenType;

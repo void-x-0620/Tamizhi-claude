@@ -1,0 +1,20 @@
+io disk
+parse bad 7
+str plain
+none
+base bad
+any IOError
+outer io
+fin1
+1
+fin2
+2
+body 0
+fin loop 0
+fin loop 1
+fin loop 2
+cleanup
+got boom
+ok
+done
+tests/v21/typed_try.tz:48: uncaught exception: ParseError

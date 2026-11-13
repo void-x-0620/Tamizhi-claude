@@ -94,6 +94,7 @@ typedef struct NodeList { Node *node; struct NodeList *next; } NodeList;
 
 typedef struct Param { const char *name; TypeInfo *type; struct Param *next; } Param;
 /* A local variable a lambda uses from its enclosing function (captured by value). */
+typedef struct Catch { const char *name; TypeInfo *type; struct Node *body; struct Catch *next; } Catch;
 typedef struct Capture {
     const char *name; TypeInfo *type; void *sym; struct Capture *next;
 } Capture;
@@ -201,7 +202,7 @@ struct Node {
                  const char *owner;        /* class that declares the field */
                } member;
         struct { NodeList *elements; } array_init;
-        struct { Node *body; const char *catch_name; Node *catch_body; } try_stmt;
+        struct { Node *body; Catch *catches; Node *finally_body; } try_stmt;
         struct { Node *value; } throw_stmt;
         struct { TypeInfo *ltype; NodeList *items; } list_new;   /* puthu List<T>(items) */
         struct { const char *name; TypeInfo *vtype; Node *coll; Node *body;

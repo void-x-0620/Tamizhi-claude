@@ -1020,12 +1020,25 @@ static Node *parse_try_stmt(Parser *p) {
     Token kw = expect(p, TOK_MUYARCHI);
     Node *n = node_new(p->arena, NK_TRY, kw.line, kw.col);
     n->try_stmt.body = parse_block(p);
-    expect(p, TOK_PIDI);
-    if (match(p, TOK_LPAREN)) {
-        n->try_stmt.catch_name = lexeme(p, expect(p, TOK_IDENT));
-        expect(p, TOK_RPAREN);
+    Catch *tail = NULL;
+    while (match(p, TOK_PIDI)) {                  /* pidi (e: Type) { } ... */
+        Catch *c = arena_alloc(p->arena, sizeof *c);
+        memset(c, 0, sizeof *c);
+        if (match(p, TOK_LPAREN)) {
+            c->name = lexeme(p, expect(p, TOK_IDENT));
+            if (match(p, TOK_COLON)) c->type = parse_type(p);
+            expect(p, TOK_RPAREN);
+        }
+        c->body = parse_block(p);
+        if (tail) tail->next = c; else n->try_stmt.catches = c;
+        tail = c;
     }
-    n->try_stmt.catch_body = parse_block(p);
+    if (match(p, TOK_IRUDHI)) n->try_stmt.finally_body = parse_block(p);
+    if (!n->try_stmt.catches && !n->try_stmt.finally_body) {
+        Token t = peek(p);
+        report_error(p->lexer->filename, t.line, t.col,
+                     "'muyarchi' needs a 'pidi' (catch) or an 'irudhi' (finally) block");
+    }
     return n;
 }
 

@@ -1488,6 +1488,10 @@ static void gen_switch(CodeGen *cg, Node *n) {
     emit(cg, "}\n");
 }
 
+static void gen_stmt(CodeGen *cg, Node *n);
+static void gen_finally_inline(CodeGen *cg, int level);
+static void gen_try(CodeGen *cg, Node *n);
+
 /* #line makes gdb, the C compiler and stack traces talk about the .tz file. */
 static void emit_line(CodeGen *cg, Node *n) {
     if (!cg->lines || n->line <= 0) return;
@@ -1498,6 +1502,142 @@ static void emit_line(CodeGen *cg, Node *n) {
         if ((unsigned char)*p >= 0x20) emit_n(cg, p, 1);
     }
     emit(cg, "\"\n");
+}
+
+/* ─── try / catch / finally ────────────────────────────────────────────── */
+static void gen_stmts(CodeGen *cg, Node *blk) {
+    for (NodeList *it = blk->block.stmts; it; it = it->next) {
+        gen_stmt(cg, it->node);
+        if (terminates(it->node)) break;
+    }
+}
+
+/* Leaving frame `level` early (return / break / continue): pop it, then run
+ * its finally block inline, as if it were written at that spot. */
+static void gen_finally_inline(CodeGen *cg, int level) {
+    Node *f = cg->fin[level];
+    if (!f) return;
+    emitf(cg, "tz_top = _f%d.prev; { ", level);
+    int saved_depth = cg->try_depth;
+    Node *saved = cg->fin[level];
+    cg->try_depth = level - 1;
+    cg->fin[level] = NULL;
+    int ind = cg->indent;
+    cg->indent = 0;
+    emit(cg, "\n");
+    gen_stmts(cg, f);
+    cg->indent = ind;
+    cg->fin[level] = saved;
+    cg->try_depth = saved_depth;
+    emit(cg, " } ");
+}
+
+/* try { } pidi ... { } at frame level d (the catch clauses only). */
+static void gen_catches(CodeGen *cg, Node *n, int d) {
+    indent(cg);
+    emitf(cg, "{ tz_Frame _f%d; _f%d.prev = tz_top; _f%d.obj = NULL; tz_top = &_f%d;\n", d, d, d, d);
+    cg->indent++;
+    indent(cg);
+    emitf(cg, "if (setjmp(_f%d.jb) == 0) {\n", d);
+    cg->indent++;
+    cg->try_depth++;
+    cg->fin[d] = NULL;
+    gen_stmts(cg, n->try_stmt.body);
+    cg->try_depth--;
+    indent(cg);
+    emitf(cg, "tz_top = _f%d.prev;\n", d);
+    cg->indent--;
+    indent(cg);
+    emit(cg, "} else {\n");
+    cg->indent++;
+    indent(cg);
+    emitf(cg, "tz_top = _f%d.prev;\n", d);
+    bool first = true, catch_all = false;
+    for (Catch *c = n->try_stmt.catches; c && !catch_all; c = c->next) {
+        TypeInfo *ct = c->type;
+        indent(cg);
+        if (ct && ct->kind == TY_CLASS)
+            emitf(cg, "%sif (_f%d.obj && tz_isa(_f%d.obj, &tz_%s__vtable)) {\n",
+                  first ? "" : "else ", d, d, ct->struct_name);
+        else if (ct && ct->kind == TY_STRING)
+            emitf(cg, "%sif (!_f%d.obj) {\n", first ? "" : "else ", d);
+        else {
+            emit(cg, first ? "{\n" : "else {\n");
+            catch_all = true;
+        }
+        first = false;
+        cg->indent++;
+        if (c->name) {
+            indent(cg);
+            if (ct && ct->kind == TY_CLASS)
+                emitf(cg, "tz_%s *tz_%s = (tz_%s *)_f%d.obj; (void)tz_%s;\n",
+                      ct->struct_name, c->name, ct->struct_name, d, c->name);
+            else if (ct && ct->kind == TY_STRING)
+                emitf(cg, "const char *tz_%s = _f%d.msg; (void)tz_%s;\n", c->name, d, c->name);
+            else
+                emitf(cg, "const char *tz_%s = _f%d.obj ? tz_cname(_f%d.obj) : _f%d.msg; (void)tz_%s;\n",
+                      c->name, d, d, d, c->name);
+        }
+        gen_stmts(cg, c->body);
+        cg->indent--;
+        indent(cg);
+        emit(cg, "}\n");
+    }
+    if (!catch_all) {
+        indent(cg);
+        emitf(cg, "else tz_rethrow(&_f%d);\n", d);
+    }
+    cg->indent--;
+    indent(cg);
+    emit(cg, "}\n");
+    cg->indent--;
+    indent(cg);
+    emit(cg, "}\n");
+}
+
+static void gen_try(CodeGen *cg, Node *n) {
+    cg->uses_throw = true;
+    int D = cg->try_depth + 1;
+    if (D >= 250) { fputs("tamizhi: try blocks nested too deeply\n", stderr); exit(1); }
+    Node *saved_fin = cg->fin[D];
+    Node *fin = n->try_stmt.finally_body;
+    if (!fin) {
+        gen_catches(cg, n, D);
+        cg->fin[D] = saved_fin;
+        return;
+    }
+    /* a guard frame D covers the body and the handlers; it runs the finally block
+     * on every way out: normal end, a rethrown / uncaught exception (then rethrows). */
+    indent(cg);
+    emitf(cg, "{ tz_Frame _f%d; _f%d.prev = tz_top; _f%d.obj = NULL; tz_top = &_f%d;\n", D, D, D, D);
+    cg->indent++;
+    indent(cg);
+    emitf(cg, "if (setjmp(_f%d.jb) == 0) {\n", D);
+    cg->indent++;
+    cg->try_depth++;
+    cg->fin[D] = fin;
+    if (n->try_stmt.catches) gen_catches(cg, n, D + 1);
+    else gen_stmts(cg, n->try_stmt.body);
+    cg->try_depth--;
+    cg->fin[D] = saved_fin;
+    indent(cg);
+    emitf(cg, "tz_top = _f%d.prev;\n", D);
+    gen_stmts(cg, fin);
+    cg->indent--;
+    indent(cg);
+    emit(cg, "} else {\n");
+    cg->indent++;
+    indent(cg);
+    emitf(cg, "tz_top = _f%d.prev;\n", D);
+    gen_stmts(cg, fin);
+    indent(cg);
+    emitf(cg, "tz_rethrow(&_f%d);\n", D);
+    cg->indent--;
+    indent(cg);
+    emit(cg, "}\n");
+    cg->indent--;
+    indent(cg);
+    emit(cg, "}\n");
 }
 
 static void gen_stmt(CodeGen *cg, Node *n) {
@@ -1624,6 +1764,7 @@ static void gen_stmt(CodeGen *cg, Node *n) {
                     gen_conv(cg, cg->ret_type, n->ret.value);
                     emit(cg, "; ");
                 }
+                for (int lv = cg->try_depth; lv >= 1; lv--) gen_finally_inline(cg, lv);
                 emit(cg, "tz_top = _f1.prev; return");
                 if (n->ret.value) emit(cg, " _rv");
                 emit(cg, "; }\n");
@@ -1640,14 +1781,22 @@ static void gen_stmt(CodeGen *cg, Node *n) {
 
         case NK_BREAK:
             indent(cg);
-            if (cg->try_depth > cg->break_base)
-                emitf(cg, "tz_top = _f%d.prev; ", cg->break_base + 1);
+            if (cg->try_depth > cg->break_base) {
+                emit(cg, "{ ");
+                for (int lv = cg->try_depth; lv > cg->break_base; lv--) gen_finally_inline(cg, lv);
+                emitf(cg, "tz_top = _f%d.prev; break; }\n", cg->break_base + 1);
+                break;
+            }
             emit(cg, "break;\n");
             break;
         case NK_CONTINUE:
             indent(cg);
-            if (cg->try_depth > cg->cont_base)
-                emitf(cg, "tz_top = _f%d.prev; ", cg->cont_base + 1);
+            if (cg->try_depth > cg->cont_base) {
+                emit(cg, "{ ");
+                for (int lv = cg->try_depth; lv > cg->cont_base; lv--) gen_finally_inline(cg, lv);
+                emitf(cg, "tz_top = _f%d.prev; continue; }\n", cg->cont_base + 1);
+                break;
+            }
             emit(cg, "continue;\n");
             break;
 
@@ -1655,51 +1804,18 @@ static void gen_stmt(CodeGen *cg, Node *n) {
             cg->uses_throw = true;
             n->throw_stmt.value = simplify(cg, n->throw_stmt.value);
             indent(cg);
-            emitf(cg, "tz_raise(%d, 0, ", n->line);
-            gen_expr(cg, n->throw_stmt.value);
-            emit(cg, ");\n");
+            if (n->throw_stmt.value->type && n->throw_stmt.value->type->kind == TY_CLASS) {
+                emitf(cg, "tz_raise_obj(%d, (void *)(", n->line);
+                gen_expr(cg, n->throw_stmt.value);
+                emit(cg, "));\n");
+            } else {
+                emitf(cg, "tz_raise(%d, 0, ", n->line);
+                gen_expr(cg, n->throw_stmt.value);
+                emit(cg, ");\n");
+            }
             break;
 
-        case NK_TRY: {
-            cg->uses_throw = true;
-            int d = cg->try_depth + 1;
-            indent(cg);
-            emitf(cg, "{ tz_Frame _f%d; _f%d.prev = tz_top; tz_top = &_f%d;\n", d, d, d);
-            cg->indent++;
-            indent(cg);
-            emitf(cg, "if (setjmp(_f%d.jb) == 0) {\n", d);
-            cg->indent++;
-            cg->try_depth++;
-            for (NodeList *it = n->try_stmt.body->block.stmts; it; it = it->next) {
-                gen_stmt(cg, it->node);
-                if (terminates(it->node)) break;
-            }
-            cg->try_depth--;
-            indent(cg);
-            emitf(cg, "tz_top = _f%d.prev;\n", d);
-            cg->indent--;
-            indent(cg);
-            emitf(cg, "} else {\n");
-            cg->indent++;
-            indent(cg);
-            emitf(cg, "tz_top = _f%d.prev;\n", d);
-            if (n->try_stmt.catch_name) {
-                indent(cg);
-                emitf(cg, "const char *tz_%s = _f%d.msg; (void)tz_%s;\n",
-                      n->try_stmt.catch_name, d, n->try_stmt.catch_name);
-            }
-            for (NodeList *it = n->try_stmt.catch_body->block.stmts; it; it = it->next) {
-                gen_stmt(cg, it->node);
-                if (terminates(it->node)) break;
-            }
-            cg->indent--;
-            indent(cg);
-            emit(cg, "}\n");
-            cg->indent--;
-            indent(cg);
-            emit(cg, "}\n");
-            break;
-        }
+        case NK_TRY: gen_try(cg, n); break;
         case NK_PATHI:    gen_pathi(cg, n); break;
 
         case NK_EXPR_STMT:
@@ -1901,7 +2017,7 @@ static void gen_vtable_types(CodeGen *cg, Node *prog) {
     for (NodeList *it = prog->program.decls; it; it = it->next) {
         Node *c = it->node;
         if (c->kind != NK_CLASS_DECL) continue;
-        emitf(cg, "struct tz_%s__vt {\n    int _n;\n", c->class_decl.name);
+        emitf(cg, "struct tz_%s__vt {\n    const void *_super;\n    const char *_name;\n", c->class_decl.name);
         for (int i = 0; i < c->class_decl.nvslots; i++) {
             Method *m = c->class_decl.vslots[i];
             emitf(cg, "    %s;\n",
@@ -1912,11 +2028,19 @@ static void gen_vtable_types(CodeGen *cg, Node *prog) {
 }
 
 static void gen_vtables(CodeGen *cg, Node *prog) {
+    for (NodeList *it = prog->program.decls; it; it = it->next)      /* parents may come later */
+        if (it->node->kind == NK_CLASS_DECL)
+            emitf(cg, "static const struct tz_%s__vt tz_%s__vtable;\n",
+                  it->node->class_decl.name, it->node->class_decl.name);
     for (NodeList *it = prog->program.decls; it; it = it->next) {
         Node *c = it->node;
         if (c->kind != NK_CLASS_DECL) continue;
-        emitf(cg, "static const struct tz_%s__vt tz_%s__vtable = { 0",
-              c->class_decl.name, c->class_decl.name);
+        if (c->class_decl.parent)
+            emitf(cg, "static const struct tz_%s__vt tz_%s__vtable = { (const void *)&tz_%s__vtable, \"%s\"",
+                  c->class_decl.name, c->class_decl.name, c->class_decl.parent, c->class_decl.name);
+        else
+            emitf(cg, "static const struct tz_%s__vt tz_%s__vtable = { 0, \"%s\"",
+                  c->class_decl.name, c->class_decl.name, c->class_decl.name);
         for (int i = 0; i < c->class_decl.nvslots; i++) {
             Method *m = c->class_decl.vslots[i];
             if (m->is_abstract) continue;
@@ -2073,24 +2197,48 @@ static const char RT_MALLOC[] =
     "}\n";
 
 static const char RT_THROW[] =
-    "/* --- runtime: exceptions (muyarchi / pidi / erivi) --- */\n"
-    "typedef struct tz_Frame { jmp_buf jb; struct tz_Frame *prev; const char *msg; } tz_Frame;\n"
+    "/* --- runtime: exceptions (muyarchi / pidi / irudhi / erivi) --- */\n"
+    "typedef struct tz_Frame { jmp_buf jb; struct tz_Frame *prev; const char *msg; void *obj; int line, runtime; } tz_Frame;\n"
     "static tz_Frame *tz_top;\n"
-    "static void tz_raise(int line, int runtime, const char *msg) __attribute__((noreturn, unused));\n"
-    "static void tz_raise(int line, int runtime, const char *msg) {\n"
+    "/* objects start with their vtable pointer; a vtable starts with { super vtable, class name } */\n"
+    "static const char *tz_cname(const void *obj) __attribute__((unused));\n"
+    "static const char *tz_cname(const void *obj) {\n"
+    "    const void *const *vt = *(const void *const *const *)obj;\n"
+    "    return (const char *)vt[1];\n"
+    "}\n"
+    "static int tz_isa(const void *obj, const void *vt) __attribute__((unused));\n"
+    "static int tz_isa(const void *obj, const void *vt) {\n"
+    "    const void *v = *(const void *const *)obj;\n"
+    "    while (v) { if (v == vt) return 1; v = *(const void *const *)v; }\n"
+    "    return 0;\n"
+    "}\n"
+    "static void tz_raise_full(int line, int runtime, const char *msg, void *obj) __attribute__((noreturn, unused));\n"
+    "static void tz_raise_full(int line, int runtime, const char *msg, void *obj) {\n"
     "    if (tz_top) {\n"
     "        tz_Frame *f = tz_top;\n"
-    "        size_t n = strlen(msg);\n"
-    "        char *copy = (char *)malloc(n + 1);\n"
-    "        if (copy) { memcpy(copy, msg, n + 1); msg = copy; }\n"
-    "        f->msg = msg;\n"
+    "        if (msg) {\n"
+    "            size_t n = strlen(msg);\n"
+    "            char *copy = (char *)malloc(n + 1);\n"
+    "            if (copy) { memcpy(copy, msg, n + 1); msg = copy; }\n"
+    "        }\n"
+    "        f->msg = msg; f->obj = obj; f->line = line; f->runtime = runtime;\n"
     "        longjmp(f->jb, 1);\n"
     "    }\n"
     "    fflush(stdout);\n"
-    "    fprintf(stderr, \"%s:%d: %s: %s\\n\", TZ_FILE, line,\n"
-    "            runtime ? \"runtime error\" : \"uncaught error\", msg);\n"
+    "    if (obj) fprintf(stderr, \"%s:%d: uncaught exception: %s\\n\", TZ_FILE, line, tz_cname(obj));\n"
+    "    else fprintf(stderr, \"%s:%d: %s: %s\\n\", TZ_FILE, line,\n"
+    "                 runtime ? \"runtime error\" : \"uncaught error\", msg);\n"
     "    exit(1);\n"
-    "}\n\n";
+    "}\n"
+    "static void tz_raise(int line, int runtime, const char *msg) __attribute__((noreturn, unused));\n"
+    "static void tz_raise(int line, int runtime, const char *msg) { tz_raise_full(line, runtime, msg, NULL); }\n"
+    "static void tz_raise_obj(int line, void *obj) __attribute__((noreturn, unused));\n"
+    "static void tz_raise_obj(int line, void *obj) {\n"
+    "    if (!obj) tz_raise_full(line, 1, \"throwing a null object\", NULL);\n"
+    "    tz_raise_full(line, 0, NULL, obj);\n"
+    "}\n"
+    "static void tz_rethrow(tz_Frame *f) __attribute__((noreturn, unused));\n"
+    "static void tz_rethrow(tz_Frame *f) { tz_raise_full(f->line, f->runtime, f->msg, f->obj); }\n\n";
 
 static const char RT_CHECKS[] =
     "/* --- runtime checks (compile with --no-checks to remove them) --- */\n"
