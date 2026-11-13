@@ -1,0 +1,3 @@
+idaimugam I { seyal f(): int; }
+vagupu A : I { seyal f(): string { kudu "x"; } }
+seyal main(): int { kudu 0; }

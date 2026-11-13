@@ -72,6 +72,7 @@ test: $(TARGET)
 	run "try / catch / throw" tests/v21/try.expected $(BIN) tests/v21/try.tz --no-gc -o $$tmp/out; \
 	run "typed catch / finally" tests/v21/typed_try.expected $(BIN) tests/v21/typed_try.tz --no-gc -o $$tmp/out; \
 	run "calling Fn values" tests/v21/fncall.expected $(BIN) tests/v21/fncall.tz --no-gc -o $$tmp/out; \
+	run "interfaces" tests/v21/iface.expected $(BIN) tests/v21/iface.tz --no-gc -o $$tmp/out; \
 	run "abstract classes" tests/v21/abstract.expected $(BIN) tests/v21/abstract.tz --no-gc -o $$tmp/out; \
 	run "lambdas" tests/v21/lambda.expected $(BIN) tests/v21/lambda.tz --no-gc -o $$tmp/out; \
 	run "standard library" tests/v21/stdlib.expected $(BIN) tests/v21/stdlib.tz --no-gc -o $$tmp/out; \

@@ -1,0 +1,3 @@
+idaimugam I { seyal f(): int; }
+vagupu A : I { }
+seyal main(): int { kudu 0; }

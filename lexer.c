@@ -36,7 +36,7 @@ static const struct { const char *word; TokenType type; } KEYWORDS[] = {
     { "pothu",      TOK_POTHU      }, { "illai",      TOK_ILLAI      },
     { "maatru",     TOK_MAATRU     }, { "alavu",      TOK_ALAVU      },
     { "irudhi",     TOK_IRUDHI     }, { "muyarchi",   TOK_MUYARCHI   }, { "pidi",       TOK_PIDI       },
-    { "erivi",      TOK_ERIVI      }, { "ulle",       TOK_ULLE       }, { "moolam",     TOK_MOOLAM     },
+    { "erivi",      TOK_ERIVI      }, { "ulle",       TOK_ULLE       }, { "moolam",     TOK_MOOLAM     }, { "idaimugam",  TOK_IDAIMUGAM  },
 };
 
 static TokenType keyword_lookup(const char *s, int len) {
@@ -437,6 +437,7 @@ const char *token_type_name(TokenType t) {
         case TOK_ERIVI: return "'erivi'";
         case TOK_ULLE: return "'ulle'";
         case TOK_MOOLAM: return "'moolam'";
+        case TOK_IDAIMUGAM: return "'idaimugam'";
         case TOK_MAATRU: return "'maatru'";
         case TOK_ALAVU: return "'alavu'";
         case TOK_EOF:        return "end of file";

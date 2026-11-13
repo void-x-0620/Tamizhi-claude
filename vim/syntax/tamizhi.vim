@@ -25,7 +25,7 @@ syn keyword tzStructKw kattamaipu inaippu pattiyal vagupu nextgroup=tzStructName
 syn keyword tzTypedefKw peyar nextgroup=tzStructName skipwhite
 syn keyword tzModifier  nilai thangu maaridum
 syn keyword tzAccess    pothu paathukaappu maraivu
-syn keyword tzModifier  moolam
+syn keyword tzModifier  moolam idaimugam
 syn keyword tzCtor      uruvaakku
 syn keyword tzOop       puthu ithu thandhai
 syn keyword tzOperatorKw maatru alavu

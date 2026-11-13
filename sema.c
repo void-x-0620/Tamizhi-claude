@@ -297,10 +297,17 @@ static Node *class_of_type(Sema *s, TypeInfo *t) {
     return y && y->kind == SYM_CLASS ? y->decl : NULL;
 }
 
-static bool is_subclass(Node *d, Node *b) {
+static bool implements(Node *d, Node *iface) {
     for (; d; d = d->class_decl.parent_decl)
-        if (d == b) return true;
+        for (int i = 0; i < d->class_decl.nidecls; i++)
+            if (d->class_decl.idecls[i] == iface) return true;
     return false;
+}
+
+static bool is_subclass(Node *d, Node *b) {
+    for (Node *c = d; c; c = c->class_decl.parent_decl)
+        if (c == b) return true;
+    return b && b->class_decl.is_interface && implements(d, b);
 }
 
 static Method *find_method(Node *cls, const char *name, Node **owner) {
@@ -2010,8 +2017,22 @@ static void class_prepare(Sema *s, Node *c) {
     at_file(s, c);
 
     Node *par = NULL;
-    if (c->class_decl.parent) {
-        Symbol *y = lookup_type(s, c->class_decl.parent);
+    const char **inames = c->class_decl.inames;
+    int ninames = c->class_decl.ninames;
+    if (c->class_decl.is_interface && (c->class_decl.parent || ninames))
+        report_error(s->filename, c->line, c->col,
+                     "interface '%s' cannot extend anything", name);
+    Symbol *first = c->class_decl.parent && !c->class_decl.is_interface
+                  ? lookup_type(s, c->class_decl.parent) : NULL;
+    bool first_iface = first && first->kind == SYM_CLASS && first->decl->class_decl.is_interface;
+    if (first_iface) {                                   /* ": Iface, ..." has no parent class */
+        const char **na = arena_alloc(s->arena, (size_t)(ninames + 1) * sizeof *na);
+        na[0] = c->class_decl.parent;
+        for (int i = 0; i < ninames; i++) na[i + 1] = inames[i];
+        inames = na; ninames++;
+    }
+    if (c->class_decl.parent && !c->class_decl.is_interface && !first_iface) {
+        Symbol *y = first;
         if (!y || y->kind != SYM_CLASS) {
             report_error(s->filename, c->line, c->col,
                          "the parent of class '%s', '%s', is not a class",
@@ -2105,6 +2126,37 @@ static void class_prepare(Sema *s, Node *c) {
                 report_error(s->filename, c->line, c->col,
                              "class '%s' must implement the abstract method '%s' "
                              "of '%s'", name, slots[i]->name, slots[i]->owner);
+    if (ninames) {
+        c->class_decl.idecls = arena_alloc(s->arena, (size_t)ninames * sizeof(Node *));
+        for (int k = 0; k < ninames; k++) {
+            Symbol *iy = lookup_type(s, inames[k]);
+            if (!iy || iy->kind != SYM_CLASS || !iy->decl->class_decl.is_interface) {
+                report_error(s->filename, c->line, c->col,
+                             "'%s' is not an interface (only the first name after ':' may be a class)",
+                             inames[k]);
+                continue;
+            }
+            Node *id = iy->decl;
+            class_prepare(s, id);
+            c->class_decl.idecls[c->class_decl.nidecls++] = id;
+            Node **ni = arena_alloc(s->arena, (size_t)(id->class_decl.nimpls + 1) * sizeof(Node *));
+            for (int i = 0; i < id->class_decl.nimpls; i++) ni[i] = id->class_decl.impls[i];
+            ni[id->class_decl.nimpls++] = c;
+            id->class_decl.impls = ni;
+            for (Method *im = id->class_decl.methods; im; im = im->next) {
+                Method *cm = find_method(c, im->name, NULL);
+                if (!cm || cm->is_static || cm->slot < 0)
+                    report_error(s->filename, c->line, c->col,
+                                 "class '%s' must have a method '%s' required by interface '%s' "
+                                 "(a 'moolam' class may declare it 'moolam seyal')",
+                                 name, im->name, inames[k]);
+                else if (!same_sig(cm, im))
+                    report_error(s->filename, cm->line, cm->col,
+                                 "method '%s' does not match the signature in interface '%s'",
+                                 im->name, inames[k]);
+            }
+        }
+    }
     s->filename = saved_fn;
 }
 

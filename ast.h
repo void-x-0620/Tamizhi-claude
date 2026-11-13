@@ -219,7 +219,10 @@ struct Node {
         struct { const char *name; TypeInfo *target; } typedef_decl;
 
         /* vagupu Name [: Parent] { fields and methods } */
-        struct { const char *name; const char *parent; bool is_abstract;
+        struct { const char *name; const char *parent; bool is_abstract, is_interface;
+                 const char **inames; int ninames;            /* ": P, I1, I2" extras */
+                 struct Node **idecls; int nidecls;           /* sema: interfaces implemented */
+                 struct Node **impls; int nimpls;             /* sema: (interface) implementing classes */
                  Field *fields; Method *methods;
                  /* filled by sema */
                  struct Node *parent_decl;

@@ -1016,6 +1016,46 @@ static void gen_mcall(CodeGen *cg, Node *n) {
 
     /* virtual call through the vtable of the static type */
     Node *cls = class_of(cg, obj->type);
+    if (cls->class_decl.is_interface) {
+        /* interface call: find the implementing class by its vtable, then call virtually */
+        if (!cls->class_decl.nimpls) {
+            fprintf(stderr, "%s:%d: error: no class implements the interface '%s'\n",
+                    cg->filename ? cg->filename : "?", n->line, cls->class_decl.name);
+            exit(1);
+        }
+        cg->uses_throw = true;
+        cg->uses_checks = cg->uses_checks || cg->checks;
+        int k = 0;
+        emit(cg, "({ void *_o = ");
+        if (cg->checks) {
+            emit(cg, "tz_nn((void *)(");
+            gen_expr(cg, obj);
+            emitf(cg, "), %d); ", n->line);
+        } else {
+            emit(cg, "(void *)(");
+            gen_expr(cg, obj);
+            emit(cg, "); ");
+        }
+        NodeList *al = n->mcall.args;
+        for (Param *p = m->params; p && al; p = p->next, al = al->next, k++) {
+            emitf(cg, "%s = ", decl_str(cg, p->type, tfmt(cg, "_ia%d", k)));
+            gen_conv(cg, p->type, al->node);
+            emit(cg, "; ");
+        }
+        for (int i = 0; i < cls->class_decl.nimpls; i++) {
+            Node *ic = cls->class_decl.impls[i];
+            Node *ir = root_class(ic);
+            bool last = i == cls->class_decl.nimpls - 1;
+            if (!last)
+                emitf(cg, "tz_isa(_o, &tz_%s__vtable) ? ", ic->class_decl.name);
+            emitf(cg, "((const struct tz_%s__vt *)((struct tz_%s *)_o)->_vt)->m_%s(_o",
+                  ic->class_decl.name, ir->class_decl.name, m->name);
+            for (int j = 0; j < k; j++) emitf(cg, ", _ia%d", j);
+            emit(cg, last ? ")" : ") : ");
+        }
+        emit(cg, "; })");
+        return;
+    }
     Node *root = root_class(cls);
     bool pure = is_pure(obj);
     const char *vt = tfmt(cg, "((const struct tz_%s__vt *)((struct tz_%s *)",

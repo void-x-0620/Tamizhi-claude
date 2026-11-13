@@ -362,7 +362,24 @@ Any expression holding an `Fn` can be called directly: `add(3)(4)`,
 `fs.get(1)(5)`, `m.get("k")(1)`. Calling something that is not a function is an
 error ("cannot be called").
 
-## 14. Not supported (on purpose or yet)
+## 14. Version 2.7: interfaces
+
+```
+idaimugam Shape { seyal area(): float; seyal name(): string; }
+
+vagupu Sq : Base, Shape, Scalable { ... }   # optional parent class first, then interfaces
+vagupu Circ : Shape { ... }                  # or interfaces only
+```
+
+- An interface lists method signatures only (no fields, bodies, `thangu`, or `moolam`).
+- A class must provide every method of each interface it names, with the same
+  signature (inherited methods count; a `moolam` class may re-declare one as `moolam seyal`).
+- An interface type can be used for variables, parameters, fields and `List<Shape>`;
+  a class converts to it implicitly, and `maatru(value, Class)` converts back.
+- Calls through an interface are dispatched by the object's real class. A null
+  interface value is caught as a runtime error. Interfaces cannot extend each other.
+
+## 15. Not supported (on purpose or yet)
 
 `goto`, bit-fields, the comma operator, inline assembly, interfaces, user generics, `finally`, constructor/method overloading, multiple inheritance, generics,
 pointer-to-const (`nilai` applies to the variable itself), `nilai` struct/class

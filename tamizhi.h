@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include <ctype.h>
 
-#define TAMIZHI_VERSION  "2.6.1"
+#define TAMIZHI_VERSION  "2.7.0"
 #define ARENA_BLOCK_SIZE (256 * 1024)
 #define STRBUF_INIT_CAP  4096
 

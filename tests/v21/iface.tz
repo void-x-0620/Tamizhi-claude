@@ -1,0 +1,34 @@
+idaimugam Shape {
+    seyal area(): float;
+    seyal name(): string;
+}
+idaimugam Scalable { seyal scale(k: float); }
+vagupu Base { pothu id: int; uruvaakku(i: int) { ithu.id = i; } }
+vagupu Sq : Base, Shape, Scalable {
+    s: float;
+    uruvaakku(s: float) { thandhai(1); ithu.s = s; }
+    seyal area(): float { kudu ithu.s * ithu.s; }
+    seyal name(): string { kudu "square"; }
+    seyal scale(k: float) { ithu.s = ithu.s * k; }
+}
+vagupu Circ : Shape {
+    r: float;
+    uruvaakku(r: float) { ithu.r = r; }
+    seyal area(): float { kudu 3.0 * ithu.r * ithu.r; }
+    seyal name(): string { kudu "circle"; }
+}
+vagupu Big : Sq {
+    uruvaakku() { thandhai(10.0); }
+    seyal name(): string { kudu "big"; }
+}
+seyal show(s: Shape) { pathi("%s %.1f\n", s.name(), s.area()); }
+seyal main(): int {
+    edu xs = puthu List<Shape>(puthu Sq(2.0), puthu Circ(1.0), puthu Big());
+    ovvoru (edu s ulle xs) { show(s); }
+    edu sc: Scalable = puthu Sq(3.0);
+    sc.scale(2.0);
+    show(maatru(sc, Sq));
+    edu none: Shape = illai;
+    muyarchi { none.area(); } pidi (e) { pathi("%s\n", e); }
+    kudu 0;
+}

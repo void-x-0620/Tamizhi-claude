@@ -1,0 +1,3 @@
+vagupu P { } vagupu Q { }
+vagupu A : P, Q { }
+seyal main(): int { kudu 0; }

@@ -100,7 +100,7 @@ static bool is_qual(TokenType t) {
 static bool is_decl_start(TokenType t) {
     return t == TOK_SEYAL || t == TOK_KATTAMAIPU || t == TOK_VELI ||
            t == TOK_SERKU || t == TOK_PATTIYAL || t == TOK_INAIPPU ||
-           t == TOK_PEYAR || t == TOK_VAGUPU || t == TOK_MOOLAM;
+           t == TOK_PEYAR || t == TOK_VAGUPU || t == TOK_MOOLAM || t == TOK_IDAIMUGAM;
 }
 
 /* nilai / thangu / maaridum, in any order, each at most once. */
@@ -205,7 +205,7 @@ static Node *parse_decl(Parser *p) {
         case TOK_INAIPPU:    return parse_struct_decl(p, true);
         case TOK_PATTIYAL:   return parse_enum_decl(p);
         case TOK_PEYAR:      return parse_typedef_decl(p);
-        case TOK_VAGUPU: case TOK_MOOLAM: return parse_class_decl(p);
+        case TOK_VAGUPU: case TOK_MOOLAM: case TOK_IDAIMUGAM: return parse_class_decl(p);
         case TOK_EDU: {
             Node *n = parse_var_decl(p, quals);
             expect(p, TOK_SEMICOLON);
@@ -694,11 +694,21 @@ static Param *parse_params(Parser *p) {
 }
 
 static Node *parse_class_decl(Parser *p) {
-    bool is_abs = match(p, TOK_MOOLAM);
-    Token kw   = expect(p, TOK_VAGUPU);
+    bool is_iface = check(p, TOK_IDAIMUGAM);
+    bool is_abs = is_iface || match(p, TOK_MOOLAM);
+    Token kw   = is_iface ? advance(p) : expect(p, TOK_VAGUPU);
     Token name = expect(p, TOK_IDENT);
     const char *parent = NULL;
-    if (match(p, TOK_COLON)) parent = lexeme(p, expect(p, TOK_IDENT));
+    const char **inames = NULL; int nin = 0;
+    if (match(p, TOK_COLON)) {                    /* : Parent, Interface, Interface */
+        parent = lexeme(p, expect(p, TOK_IDENT));
+        while (match(p, TOK_COMMA)) {
+            const char **na = arena_alloc(p->arena, (size_t)(nin + 1) * sizeof *na);
+            for (int i = 0; i < nin; i++) na[i] = inames[i];
+            na[nin++] = lexeme(p, expect(p, TOK_IDENT));
+            inames = na;
+        }
+    }
     expect(p, TOK_LBRACE);
 
     Field  *fh = NULL, *ft = NULL;
@@ -744,7 +754,13 @@ static Node *parse_class_decl(Parser *p) {
             m->line = mn.line; m->col = mn.col;
             m->params = parse_params(p);
             if (match(p, TOK_COLON)) m->ret_type = parse_type(p);
-            if (is_abs_m) {
+            if (is_iface) {
+                m->is_abstract = true;
+                if (is_static || is_abs_m)
+                    report_error(p->lexer->filename, mn.line, mn.col,
+                                 "interface methods are plain 'seyal' declarations");
+                expect(p, TOK_SEMICOLON);
+            } else if (is_abs_m) {
                 m->is_abstract = true;
                 if (is_static)
                     report_error(p->lexer->filename, mn.line, mn.col,
@@ -757,6 +773,8 @@ static Node *parse_class_decl(Parser *p) {
             }
             if (mt) mt->next = m; else mh = m;
             mt = m;
+        } else if (is_iface) {
+            syntax_error(p, t, "an interface can only contain 'seyal name(...): type;' declarations");
         } else if (t.type == TOK_IDENT) {
             Token fn = advance(p);
             expect(p, TOK_COLON);
@@ -785,6 +803,8 @@ static Node *parse_class_decl(Parser *p) {
     Node *n = node_new(p->arena, NK_CLASS_DECL, kw.line, kw.col);
     n->class_decl.name    = lexeme(p, name);
     n->class_decl.parent  = parent;
+    n->class_decl.is_interface = is_iface;
+    n->class_decl.inames = inames; n->class_decl.ninames = nin;
     n->class_decl.is_abstract = is_abs;
     n->class_decl.fields  = fh;
     n->class_decl.methods = mh;
