@@ -1,0 +1,18 @@
+# nool/net.tzb — Tamizhi standard library: TCP sockets and an HTTP client (plain http:// only).
+# A socket is an int; a negative value means failure. Calls block until they finish.
+veli "tz_std.h";
+veli seyal tcp_connect   = tz_tcp_connect(host : string, port : int) : int;
+veli seyal tcp_listen    = tz_tcp_listen(port : int) : int;          # port 0 picks a free port
+veli seyal net_port      = tz_net_port(sock : int) : int;
+veli seyal tcp_accept    = tz_tcp_accept(sock : int) : int;
+veli seyal net_send      = tz_net_send(sock : int, data : string) : int;   # bytes sent, -1 on error
+veli seyal net_recv      = tz_net_recv(sock : int, max : int) : string;    # "" when closed; illai on error
+veli seyal net_recv_line = tz_net_recv_line(sock : int) : string;          # without line ending; illai when closed
+veli seyal net_wait      = tz_net_wait(sock : int, ms : int) : int;        # 1 if data is ready
+veli seyal net_close     = tz_net_close(sock : int);
+veli seyal net_peer      = tz_net_peer(sock : int) : string;               # the other side's IP address
+veli seyal http_get      = tz_http_get(url : string) : string;             # body; illai on failure
+veli seyal http_post     = tz_http_post(url : string, body : string, content_type : string) : string;
+veli seyal http_request  = tz_http_request(method : string, url : string, body : string, content_type : string, headers : string) : string;
+veli seyal http_status   = tz_http_status() : int;                         # of the last request
+veli seyal http_headers  = tz_http_headers() : string;                     # of the last request

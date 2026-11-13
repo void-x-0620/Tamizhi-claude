@@ -1,0 +1,23 @@
+serku "nool/net.tzb";
+serku "nool/string.tzb";
+seyal main(): int {
+    edu srv = tcp_listen(0);
+    edu port = net_port(srv);
+    pathi("%d\n", port > 0);
+    edu cli = tcp_connect("127.0.0.1", port);
+    pathi("%d\n", cli >= 0);
+    net_send(cli, "hello\r\nsecond line\n");
+    edu conn = tcp_accept(srv);
+    pathi("[%s]\n", net_recv_line(conn));
+    pathi("[%s]\n", net_recv_line(conn));
+    net_send(conn, "pong");
+    pathi("%d\n", net_wait(cli, 1000));
+    pathi("%s\n", net_recv(cli, 100));
+    pathi("%s\n", net_peer(conn));
+    net_close(conn);
+    pathi("[%s]\n", net_recv(cli, 10));
+    net_close(cli); net_close(srv);
+    pathi("%d\n", tcp_connect("127.0.0.1", 1));
+    pathi("%d\n", http_get("https://example.com") == illai);
+    kudu 0;
+}

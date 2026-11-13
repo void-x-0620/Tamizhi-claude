@@ -9,5 +9,6 @@ serku "process.tzb";
 serku "encoding.tzb";
 serku "regex.tzb";
 serku "json.tzb";
+serku "net.tzb";
 serku "listutil.tzh";
 serku "collections.tzh";

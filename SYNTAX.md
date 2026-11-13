@@ -267,7 +267,9 @@ Strings returned by the library are malloc'd and never freed.
 | `process` | run_command capture_command get_pid hostname |
 | `encoding` | hash_djb2 hash_fnv1a crc32 sha256 base64_encode/decode hex_encode/decode url_encode/decode |
 | `regex` | regex_match regex_find regex_replace (POSIX extended) |
+| `net` | tcp_connect tcp_listen tcp_accept net_port net_send net_recv net_recv_line net_wait net_close net_peer; http_get http_post http_request http_status http_headers (plain `http://` only, redirects and chunked replies handled, no TLS) |
 | `json` (text based) | json_valid json_get json_type json_has json_len json_keys json_escape json_quote json_pretty json_minify; paths like `users[0].name` |
+| `collections` (generic, written in Tamizhi) | Stack<T> Queue<T> Pair<A, B> min_of max_of swap_values |
 | `listutil` (written in Tamizhi) | sum_int sum_float max_int min_int index_of_int index_of_str contains_int reverse_int sort_int sort_float sort_str range_list |
 
 ## 9. Version 2.2: diagnostics and range loops

@@ -154,6 +154,23 @@ const char *tz_json_quote(const char *s);
 const char *tz_json_pretty(const char *s);
 const char *tz_json_minify(const char *s);
 
+/* ---- net: TCP and HTTP (plain http) ---- */
+long long tz_tcp_connect(const char *host, long long port);
+long long tz_tcp_listen(long long port);
+long long tz_net_port(long long fd);
+long long tz_tcp_accept(long long fd);
+long long tz_net_send(long long fd, const char *s);
+const char *tz_net_recv(long long fd, long long max);
+const char *tz_net_recv_line(long long fd);
+long long tz_net_wait(long long fd, long long ms);
+void tz_net_close(long long fd);
+const char *tz_net_peer(long long fd);
+long long tz_http_status(void);
+const char *tz_http_headers(void);
+const char *tz_http_get(const char *url);
+const char *tz_http_post(const char *url, const char *body, const char *ctype);
+const char *tz_http_request(const char *method, const char *url, const char *body, const char *ctype, const char *headers);
+
 #ifdef __cplusplus
 }
 #endif

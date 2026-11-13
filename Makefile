@@ -107,6 +107,7 @@ test: $(TARGET) stdlib
 	run "Dict alias" tests/v21/dict.expected $(BIN) tests/v21/dict.tz --no-gc -o $$tmp/out; \
 	run "generics" tests/v21/generic.expected $(BIN) tests/v21/generic.tz --no-gc -o $$tmp/out; \
 	run "generic collections" tests/v21/collections.expected $(BIN) tests/v21/collections.tz --no-gc -o $$tmp/out; \
+	run "stdlib: net" tests/v21/net.expected $(BIN) tests/v21/net.tz --no-gc -o $$tmp/out; \
 	run "abstract classes" tests/v21/abstract.expected $(BIN) tests/v21/abstract.tz --no-gc -o $$tmp/out; \
 	run "lambdas" tests/v21/lambda.expected $(BIN) tests/v21/lambda.tz --no-gc -o $$tmp/out; \
 	run "standard library" tests/v21/stdlib.expected $(BIN) tests/v21/stdlib.tz --no-gc -o $$tmp/out; \
