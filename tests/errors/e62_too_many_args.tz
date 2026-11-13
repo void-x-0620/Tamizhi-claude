@@ -1,0 +1,2 @@
+seyal f(a: int): int { kudu a; }
+seyal main(): int { kudu f(1, 2); }

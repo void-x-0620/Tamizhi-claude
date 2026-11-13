@@ -1,4 +1,4 @@
-# Tamizhi 2.3 — complete syntax reference
+# Tamizhi 2.4 — complete syntax reference
 
 Tamizhi is compiled to C99/GNU C and then to a native binary. Keywords are
 Tanglish (Tamil written in English letters). Every example below compiles.
@@ -238,7 +238,7 @@ An abstract class cannot be created with `puthu`; every concrete subclass must i
 ```
 edu f = seyal(x: int, y: int): int { kudu x + y; };
 ```
-A lambda is an anonymous function usable as a value (`seyal(int,int): int`). It sees globals but **cannot capture local variables**.
+A lambda that uses no local variables is a plain function value (`seyal(int,int): int`). One that does becomes a **closure** (section 11).
 
 ### Standard library
 `serku "nool/all.tzh";` imports all of: `io` (read_line, read_int, read_float, read_file, write_file, append_file, file_exists),
@@ -291,9 +291,33 @@ refer to your `.tz` file and line numbers.
 the compiler runs on a 1 GiB stack so very long expressions work, and `make fuzz` runs mutation fuzzing
 (ASan build) plus a constant-folding-versus-runtime differential test.
 
-## 11. Not supported (on purpose or yet)
+## 11. Version 2.4: closures
 
-`goto`, bit-fields, the comma operator, inline assembly, interfaces, user generics, closures (lambdas cannot capture locals), `finally`, constructor/method overloading, multiple inheritance, generics,
+```
+seyal make_adder(n: int): Fn<(int): int> {            # Fn<(params): result> is the closure type
+    kudu seyal(x: int): int { kudu x + n; };          # uses n, so it captures it
+}
+edu add5 = make_adder(5);
+pathi("%d\n", add5(1));                               # 6
+edu count = 0;
+edu next = seyal(): int { count += 1; kudu count; };  # the closure has its own copy of count
+next(); next();                                       # 1, 2   (the outer 'count' stays 0)
+```
+* Captures are **by value**: the closure copies each local it uses when it is created and keeps (and may
+  modify) its own copy. Two closures from the same function do not share state.
+* An `Fn<…>` value can hold a closure, a lambda with no captures, or the name of an ordinary function
+  (conversion is implicit). An `Fn` cannot be passed where a plain `seyal(…)` function type is expected
+  (C libraries need plain pointers), but a non-capturing lambda can.
+* Closures work as variables, parameters, return values, struct/class fields (`b.on_click(1)`) and List items.
+  Lambdas nest; the inner one may use variables of the outermost function.
+* Not allowed: capturing an array (capture a `List`), using `ithu` directly (copy it to a local first).
+* Closure environments live on the heap (freed by the GC with `--gc`, leaked with `--no-gc`).
+* Calling a never-assigned `Fn` is a runtime error.
+* Function calls now report `'f' expects N arguments but M were given` for too many arguments as well as too few.
+
+## 12. Not supported (on purpose or yet)
+
+`goto`, bit-fields, the comma operator, inline assembly, interfaces, user generics, `finally`, constructor/method overloading, multiple inheritance, generics,
 pointer-to-const (`nilai` applies to the variable itself), `nilai` struct/class
 fields, nested/local type declarations, variadic user functions, and unchecked
 downcast safety. C evaluates function arguments in an unspecified order, so do

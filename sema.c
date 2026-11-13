@@ -44,6 +44,49 @@ static Symbol *lookup_in(Scope *sc, const char *name) {
     return NULL;
 }
 
+/* A lambda being checked: the locals it uses from outside become captures. */
+typedef struct LambdaCtx {
+    Scope *boundary;               /* the lambda's own parameter scope */
+    Capture *caps, *tail;
+    int ncap;
+    struct LambdaCtx *outer;
+} LambdaCtx;
+
+static void add_capture(Sema *s, LambdaCtx *l, Symbol *y) {
+    for (Capture *c = l->caps; c; c = c->next)
+        if (c->sym == y) return;
+    Capture *c = arena_alloc(s->arena, sizeof *c);
+    c->name = y->name; c->type = y->type; c->sym = y; c->next = NULL;
+    if (l->tail) l->tail->next = c; else l->caps = c;
+    l->tail = c;
+    l->ncap++;
+}
+
+static Symbol *lookup(Sema *s, const char *name);
+static void func_decl(Sema *s, Node *n);
+
+/* Like lookup(), but a local of an enclosing function used inside a lambda
+ * is recorded as a capture of every lambda between the use and the owner. */
+static Symbol *lookup_cap(Sema *s, const char *name, void **capslot) {
+    Scope *found = NULL;
+    Symbol *y = NULL;
+    for (Scope *sc = s->scope; sc; sc = sc->parent) {
+        y = lookup_in(sc, name);
+        if (y) { found = sc; break; }
+    }
+    if (capslot) *capslot = NULL;
+    if (!y || y->kind != SYM_VAR || found == s->global || !s->lam) return y;
+    for (LambdaCtx *l = s->lam; l; l = l->outer) {
+        bool outside = false;
+        for (Scope *sc = l->boundary ? l->boundary->parent : NULL; sc; sc = sc->parent)
+            if (sc == found) { outside = true; break; }
+        if (!outside) break;
+        add_capture(s, l, y);
+        if (l == s->lam && capslot) *capslot = y;
+    }
+    return y;
+}
+
 static Symbol *lookup(Sema *s, const char *name) {
     for (Scope *sc = s->scope; sc; sc = sc->parent) {
         Symbol *y = lookup_in(sc, name);
@@ -164,6 +207,12 @@ static const char *type_str(Sema *s, TypeInfo *t) {
             if (t->array_size > 0)
                 return tfmt(s, "%s[%d]", type_str(s, t->elem_type), t->array_size);
             return tfmt(s, "%s[]", type_str(s, t->elem_type));
+        case TY_CLOSURE: {
+            const char *r = "Fn<(";
+            for (Param *p = t->fparams; p; p = p->next)
+                r = tfmt(s, "%s%s%s", r, type_str(s, p->type), p->next ? ", " : "");
+            return tfmt(s, "%s): %s>", r, type_str(s, t->fret));
+        }
         case TY_FUNC: {
             const char *r = "seyal(";
             for (Param *p = t->fparams; p; p = p->next)
@@ -344,7 +393,7 @@ static void resolve_type(Sema *s, TypeInfo *t, int line, int col) {
                              "%s keys must be an integer, char, bool, enum or string, not %s",
                              t->is_set ? "Set" : "Map", type_str(s, t->key_type));
             return;
-        case TY_FUNC:
+        case TY_FUNC: case TY_CLOSURE:
             for (Param *p = t->fparams; p; p = p->next)
                 resolve_type(s, p->type, line, col);
             resolve_type(s, t->fret, line, col);
@@ -465,6 +514,12 @@ static bool assignable(Sema *s, TypeInfo *d, TypeInfo *src, Node *node) {
         case TY_FUNC:
             return src->kind == TY_NULL ||
                    (src->kind == TY_FUNC && type_same(d, src));
+        case TY_CLOSURE: {       /* a closure, or any plain function of the same shape */
+            if (src->kind != TY_CLOSURE && src->kind != TY_FUNC) return false;
+            TypeInfo tmp = *src;
+            tmp.kind = TY_CLOSURE;
+            return type_same(d, &tmp);
+        }
         case TY_MAP:
             return src->kind == TY_NULL ||
                    (src->kind == TY_MAP && d->is_set == src->is_set &&
@@ -631,10 +686,16 @@ static void check_args(Sema *s, Param *params, NodeList *args, const char *name,
                          idx, name, type_str(s, par->type), type_str(s, at),
                          conv_hint(s, par->type, at));
     }
+    bool extra = arg != NULL;
     for (; arg; arg = arg->next) expr(s, arg->node);
-    if (par || arg)
+    if (par || extra) {
+        int want = 0, got = 0;
+        for (Param *q = params; q; q = q->next) want++;
+        for (NodeList *a = args; a; a = a->next) got++;
         report_error(s->filename, line, col,
-                     "wrong number of arguments to '%s'", name);
+                     "'%s' expects %d argument%s but %d %s given", name, want,
+                     want == 1 ? "" : "s", got, got == 1 ? "was" : "were");
+    }
 }
 
 static void expr_list(Sema *s, NodeList *l) {
@@ -828,7 +889,7 @@ static TypeInfo *expr(Sema *s, Node *n) {
         case NK_NULL_LIT:   return n->type = &ty_null;
 
         case NK_IDENT: {
-            Symbol *y = lookup(s, n->ident.name);
+            Symbol *y = lookup_cap(s, n->ident.name, &n->ident.capsym);
             if (y) y->used = true;
             if (!y) {
                 suggest_symbol(s, n->ident.name, false);
@@ -849,6 +910,12 @@ static TypeInfo *expr(Sema *s, Node *n) {
         }
 
         case NK_THIS:
+            if (s->lam) {
+                diag_hint("copy it first: edu me = ithu;  then use 'me' in the lambda");
+                report_error(s->filename, n->line, n->col,
+                             "a lambda cannot use 'ithu' directly");
+                return n->type = &ty_unknown;
+            }
             if (!s->cur_class || (s->cur_method && s->cur_method->is_static)) {
                 report_error(s->filename, n->line, n->col,
                              "'ithu' can only be used inside a non-static method");
@@ -918,6 +985,11 @@ static TypeInfo *expr(Sema *s, Node *n) {
         case NK_LIST_NEW: {
             TypeInfo *lt = n->list_new.ltype;
             resolve_type(s, lt, n->line, n->col);
+            if (lt->kind == TY_CLOSURE) {
+                report_error(s->filename, n->line, n->col,
+                             "Fn<...> is a type, not a class: write a lambda: seyal(x: int): int { ... }");
+                return n->type = &ty_unknown;
+            }
             if (lt->kind == TY_MAP) {
                 if (!lt->is_set && n->list_new.items)
                     report_error(s->filename, n->line, n->col,
@@ -1092,7 +1164,7 @@ static TypeInfo *expr(Sema *s, Node *n) {
         }
 
         case NK_CALL: {
-            Symbol *y = lookup(s, n->call.name);
+            Symbol *y = lookup_cap(s, n->call.name, &n->call.capsym);
             if (y) y->used = true;
             if (!y) {
                 suggest_symbol(s, n->call.name, true);
@@ -1101,7 +1173,10 @@ static TypeInfo *expr(Sema *s, Node *n) {
                 expr_list(s, n->call.args);
                 return n->type = &ty_unknown;
             }
-            if (y->kind == SYM_VAR && !is_unknown(y->type) && y->type->kind == TY_FUNC) {
+            if (y->kind == SYM_VAR && !is_unknown(y->type) && y->type->kind == TY_CLOSURE)
+                n->call.is_closure = true;
+            if (y->kind == SYM_VAR && !is_unknown(y->type) &&
+                (y->type->kind == TY_FUNC || y->type->kind == TY_CLOSURE)) {
                 check_args(s, y->type->fparams, n->call.args, n->call.name,
                            n->line, n->col);
                 n->call.params = y->type->fparams;
@@ -1121,6 +1196,32 @@ static TypeInfo *expr(Sema *s, Node *n) {
             n->call.params = y->params;
             n->call.cname = y->cname;          /* non-NULL: call into C */
             return n->type = y->type;
+        }
+
+        case NK_LAMBDA: {
+            Node *fn = n->lambda.fn;
+            for (Param *p = fn->func_decl.params; p; p = p->next)
+                resolve_type(s, p->type, fn->line, fn->col);
+            resolve_type(s, fn->func_decl.ret_type, fn->line, fn->col);
+            TypeInfo *rt = fn->func_decl.ret_type ? fn->func_decl.ret_type : &ty_void;
+            LambdaCtx ctx = {0};
+            ctx.outer = s->lam;
+            s->lam = &ctx;
+            int saved_loops = s->loop_depth;
+            s->loop_depth = 0;
+            func_decl(s, fn);
+            s->loop_depth = saved_loops;
+            s->lam = ctx.outer;
+            for (Capture *c = ctx.caps; c; c = c->next)
+                if (!is_unknown(c->type) && c->type->kind == TY_ARRAY)
+                    report_error(s->filename, n->line, n->col,
+                                 "a lambda cannot capture the array '%s' (capture a List instead)",
+                                 c->name);
+            n->lambda.caps = ctx.caps;
+            n->lambda.ncap = ctx.ncap;
+            TypeInfo *ft = type_func(s->arena, fn->func_decl.params, rt);
+            if (ctx.ncap) ft->kind = TY_CLOSURE;
+            return n->type = ft;
         }
 
         case NK_MCALL:  return n->type = mcall_expr(s, n);
@@ -1490,9 +1591,10 @@ static TypeInfo *mcall_expr(Sema *s, Node *n) {
     if (st->kind == TY_STRUCT) {
         Symbol *sd = lookup_type(s, st->struct_name);
         Field *f = sd && sd->kind == SYM_STRUCT ? find_field(sd->fields, mname) : NULL;
-        if (f && f->type->kind == TY_FUNC) {
+        if (f && (f->type->kind == TY_FUNC || f->type->kind == TY_CLOSURE)) {
             check_args(s, f->type->fparams, n->mcall.args, mname, n->line, n->col);
             n->mcall.fparams = f->type->fparams;
+            n->mcall.closure_field = f->type->kind == TY_CLOSURE;
             return f->type->fret;
         }
     }
@@ -1694,6 +1796,7 @@ static void body_with_params(Sema *s, Param *params, TypeInfo *rt, Node *body,
     TypeInfo *saved = s->current_ret;
     s->current_ret = rt;
     scope_push(s);
+    if (s->lam && !((LambdaCtx *)s->lam)->boundary) ((LambdaCtx *)s->lam)->boundary = s->scope;
     for (Param *p = params; p; p = p->next)
         declare(s, p->name, SYM_VAR, p->type ? p->type : &ty_unknown, line, col);
     stmt(s, body);

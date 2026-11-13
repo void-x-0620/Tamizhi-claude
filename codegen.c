@@ -557,6 +557,7 @@ static const char *decl_str(CodeGen *cg, TypeInfo *t, const char *inner) {
         case TY_CLASS:  base = tfmt(cg, "tz_%s *", t->struct_name); break;
         case TY_LIST:   base = tfmt(cg, "tz_List_%d *", list_index(cg, t->elem_type)); break;
         case TY_MAP:    base = tfmt(cg, "tz_Map_%d *", map_index(cg, t)); break;
+        case TY_CLOSURE: base = "tz_Fn"; cg->uses_closure = true; break;
         default:        base = "long long"; break;
     }
     size_t bl = strlen(base);
@@ -605,7 +606,7 @@ static void gen_zero_init(CodeGen *cg, TypeInfo *t) {
     switch (t ? t->kind : TY_UNKNOWN) {
         case TY_FLOAT:  emit(cg, "0.0"); break;
         case TY_STRING: emit(cg, "\"\""); break;
-        case TY_ARRAY:
+        case TY_ARRAY: case TY_CLOSURE:
         case TY_STRUCT: emit(cg, "{0}"); break;
         default:        emit(cg, "0");   break;
     }
@@ -630,7 +631,17 @@ static bool is_integral_t(TypeInfo *t) {
 
 /* Pointer-like destination types need an explicit cast when the source is
  * a different pointer type (class upcasts, void*, char* vs string, ...). */
+static const char *adapter_for(CodeGen *cg, TypeInfo *ft);
+static void gen_args(CodeGen *cg, Param *params, NodeList *args, bool lead);
+
 static void gen_conv(CodeGen *cg, TypeInfo *dst, Node *src) {
+    if (dst && dst->kind == TY_CLOSURE && src->type && src->type->kind == TY_FUNC) {
+        cg->uses_closure = true;                  /* a plain function as an Fn value */
+        emitf(cg, "((tz_Fn){ (void *)%s, (void *)(", adapter_for(cg, src->type));
+        gen_expr(cg, src);
+        emit(cg, ") })");
+        return;
+    }
     bool dst_ptr = dst && (dst->kind == TY_CLASS || dst->kind == TY_POINTER ||
                            dst->kind == TY_FUNC || dst->kind == TY_STRING);
     if (dst_ptr && src->type && src->type->kind != TY_NULL &&
@@ -642,6 +653,107 @@ static void gen_conv(CodeGen *cg, TypeInfo *dst, Node *src) {
         return;
     }
     gen_expr(cg, src);
+}
+
+/* ─── Lambdas and closures ─────────────────────────────────────────────── */
+/* A thunk that lets a plain function pointer be called like a closure. */
+static const char *adapter_for(CodeGen *cg, TypeInfo *ft) {
+    const char *key = decl_str(cg, ft, "");
+    for (int i = 0; i < cg->nadapt; i++)
+        if (!strcmp(cg->adapt_keys[i], key)) return tfmt(cg, "tz_adapt_%d", i);
+    if (cg->nadapt >= 64) { fputs("tamizhi: too many function shapes\n", stderr); exit(1); }
+    int n = cg->nadapt++;
+    cg->adapt_keys[n] = key;
+    const char *ps = "void *env", *as = "";
+    int i = 0;
+    for (Param *p = ft->fparams; p; p = p->next, i++) {
+        ps = tfmt(cg, "%s, %s", ps, decl_str(cg, p->type, tfmt(cg, "a%d", i)));
+        as = tfmt(cg, "%s%sa%d", as, i ? ", " : "", i);
+    }
+    bool is_void = ft->fret->kind == TY_VOID;
+    strbuf_appendf(&cg->lam_defs, "static %s {\n    %s((%s)env)(%s);\n}\n",
+                   decl_str(cg, ft->fret, tfmt(cg, "tz_adapt_%d(%s)", n, ps)),
+                   is_void ? "" : "return ", key, as);
+    strbuf_appendf(&cg->lam_protos, "static %s;\n",
+                   decl_str(cg, ft->fret, tfmt(cg, "tz_adapt_%d(%s)", n, ps)));
+    return tfmt(cg, "tz_adapt_%d", n);
+}
+
+static bool captured_here(CodeGen *cg, void *sym) {
+    if (!cg->lam || !sym) return false;
+    for (Capture *c = cg->lam->caps; c; c = c->next)
+        if (c->sym == sym) return true;
+    return false;
+}
+
+static void gen_lambda(CodeGen *cg, Node *n) {
+    Node *fn = n->lambda.fn;
+    bool closure = n->lambda.ncap > 0;
+    if (!n->lambda.id) {
+        int id = n->lambda.id = ++cg->nlams;
+        TypeInfo *rt = fn->func_decl.ret_type ? fn->func_decl.ret_type : &ty_void;
+        const char *name = tfmt(cg, "tz_lambda%d", id);
+        const char *ps = closure
+            ? params_str(cg, fn->func_decl.params, true,
+                         fn->func_decl.params ? "void *_env, " : "void *_env")
+            : params_str(cg, fn->func_decl.params, true, NULL);
+        const char *sig = decl_str(cg, rt, tfmt(cg, "%s(%s)", name, ps));
+        strbuf_appendf(&cg->lam_protos, "static %s;\n", sig);
+
+        StrBuf saved = cg->out;                       /* build the body on the side */
+        strbuf_init(&cg->out);
+        TypeInfo *s_ret = cg->ret_type;
+        int s_try = cg->try_depth, s_brk = cg->break_base, s_cnt = cg->cont_base, s_ind = cg->indent;
+        LamFrame frame = { n->lambda.caps, cg->lam };
+        cg->lam = &frame;
+        cg->ret_type = rt;
+        cg->try_depth = cg->break_base = cg->cont_base = 0;
+        cg->indent = 1;
+        if (closure) {
+            emitf(cg, "struct tz_Env_%d {\n", id);
+            for (Capture *c = n->lambda.caps; c; c = c->next)
+                emitf(cg, "    %s;\n", decl_str(cg, c->type, tfmt(cg, "tz_%s", c->name)));
+            emit(cg, "};\n");
+        }
+        emitf(cg, "static %s {\n", sig);
+        if (closure) emitf(cg, "    struct tz_Env_%d *_e = (struct tz_Env_%d *)_env; (void)_e;\n", id, id);
+        gen_block(cg, fn->func_decl.body);
+        emit(cg, "\n}\n\n");
+        cg->lam = frame.outer;
+        cg->ret_type = s_ret; cg->try_depth = s_try; cg->break_base = s_brk;
+        cg->cont_base = s_cnt; cg->indent = s_ind;
+        StrBuf body = cg->out;
+        cg->out = saved;
+        strbuf_append(&cg->lam_defs, body.data);
+        strbuf_free(&body);
+    }
+    int id = n->lambda.id;
+    if (!closure) { emitf(cg, "tz_lambda%d", id); return; }
+    cg->uses_closure = cg->uses_heap = true;
+    emitf(cg, "({ struct tz_Env_%d *_ev = (struct tz_Env_%d *)tz_alloc_obj(sizeof *_ev); ", id, id);
+    for (Capture *c = n->lambda.caps; c; c = c->next) {
+        if (captured_here(cg, c->sym)) emitf(cg, "_ev->tz_%s = _e->tz_%s; ", c->name, c->name);
+        else                           emitf(cg, "_ev->tz_%s = tz_%s; ", c->name, c->name);
+    }
+    emitf(cg, "(tz_Fn){ (void *)tz_lambda%d, _ev }; })", id);
+}
+
+static void gen_closure_call(CodeGen *cg, Node *n) {
+    const char *ps = "void *";
+    for (Param *p = n->call.params; p; p = p->next)
+        ps = tfmt(cg, "%s, %s", ps, decl_str(cg, p->type, ""));
+    const char *fty = decl_str(cg, n->type, tfmt(cg, "(*)(%s)", ps));
+    emit(cg, "({ tz_Fn _f = ");
+    if (captured_here(cg, n->call.capsym)) emitf(cg, "_e->tz_%s", n->call.name);
+    else emit_ident(cg, n->call.name);
+    emit(cg, "; ");
+    if (cg->checks) {
+        cg->uses_checks = true;
+        emitf(cg, "if (!_f.fn) tz_fail(%d, \"call of a null function value\", 0, 0); ", n->line);
+    }
+    emitf(cg, "((%s)_f.fn)(_f.env", fty);
+    gen_args(cg, n->call.params, n->call.args, true);
+    emit(cg, "); })");
 }
 
 static void gen_args(CodeGen *cg, Param *params, NodeList *args, bool lead) {
@@ -773,6 +885,25 @@ static void gen_mcall(CodeGen *cg, Node *n) {
     if (n->mcall.builtin >= 11) { gen_map_call(cg, n); return; }
     if (n->mcall.builtin) { gen_list_call(cg, n); return; }
 
+    if (!m && n->mcall.closure_field) {               /* struct field holding an Fn */
+        const char *ps = "void *";
+        for (Param *p = n->mcall.fparams; p; p = p->next)
+            ps = tfmt(cg, "%s, %s", ps, decl_str(cg, p->type, ""));
+        const char *fty = decl_str(cg, n->type, tfmt(cg, "(*)(%s)", ps));
+        emit(cg, "({ tz_Fn _f = ");
+        gen_expr(cg, obj);
+        emit(cg, obj->type && obj->type->kind == TY_POINTER ? "->" : ".");
+        emit_ident(cg, n->mcall.method);
+        emit(cg, "; ");
+        if (cg->checks) {
+            cg->uses_checks = true;
+            emitf(cg, "if (!_f.fn) tz_fail(%d, \"call of a null function value\", 0, 0); ", n->line);
+        }
+        emitf(cg, "((%s)_f.fn)(_f.env", fty);
+        gen_args(cg, n->mcall.fparams, n->mcall.args, true);
+        emit(cg, "); })");
+        return;
+    }
     if (!m) {                                         /* struct callback field */
         gen_expr(cg, obj);
         emit(cg, obj->type && obj->type->kind == TY_POINTER ? "->" : ".");
@@ -855,8 +986,11 @@ static void gen_expr(CodeGen *cg, Node *n) {
         case NK_BOOL_LIT:   emit(cg, n->bool_lit.value ? "1" : "0"); break;
         case NK_NULL_LIT:   emit(cg, "NULL"); break;
         case NK_THIS:       emit(cg, "self"); break;
+        case NK_LAMBDA: gen_lambda(cg, n); break;
+
         case NK_IDENT:
-            if (n->ident.cname) emit(cg, n->ident.cname);
+            if (captured_here(cg, n->ident.capsym)) emitf(cg, "_e->tz_%s", n->ident.name);
+            else if (n->ident.cname) emit(cg, n->ident.cname);
             else emit_ident(cg, n->ident.name);
             break;
 
@@ -961,7 +1095,9 @@ static void gen_expr(CodeGen *cg, Node *n) {
         }
 
         case NK_CALL:
-            if (n->call.cname) emit(cg, n->call.cname);     /* C binding: raw name */
+            if (n->call.is_closure) { gen_closure_call(cg, n); break; }
+            if (captured_here(cg, n->call.capsym)) emitf(cg, "_e->tz_%s", n->call.name);
+            else if (n->call.cname) emit(cg, n->call.cname);     /* C binding: raw name */
             else               emit_ident(cg, n->call.name);
             emit(cg, "(");
             gen_args(cg, n->call.params, n->call.args, false);
@@ -1717,6 +1853,11 @@ void codegen_init(CodeGen *cg, Arena *arena, const char *filename) {
     strbuf_init(&cg->lists);
     cg->nlists = 0;
     cg->nmaps = 0;
+    strbuf_init(&cg->lam_defs);
+    strbuf_init(&cg->lam_protos);
+    cg->nlams = cg->nadapt = 0;
+    cg->uses_closure = false;
+    cg->lam = NULL;
     cg->try_depth = cg->break_base = cg->cont_base = 0;
     cg->prog = NULL;
     cg->ret_type = NULL;
@@ -1975,6 +2116,7 @@ void codegen_generate(CodeGen *cg, Node *prog) {
         }
     }
     gen_vtables(cg, prog);
+    size_t lam_pos = cg->out.len;
 
     for (NodeList *it = prog->program.decls; it; it = it->next) {
         Node *d = it->node;
@@ -2027,12 +2169,16 @@ void codegen_generate(CodeGen *cg, Node *prog) {
         strbuf_append(&rt, RT_THROW);
         if (cg->uses_checks) strbuf_append(&rt, RT_CHECKS);
     }
+    if (cg->uses_closure)
+        strbuf_append(&rt, "typedef struct { void *fn; void *env; } tz_Fn;\n\n");
     if (cg->uses_heap) {
         strbuf_append(&rt, cg->gc ? RT_GC : RT_MALLOC);
         strbuf_append(&rt, "\n");
         strbuf_append(&rt, RT_COMMON);
         strbuf_append(&rt, RT_GROW);
     }
+    if (cg->lam_defs.len) insert_at(cg, lam_pos, cg->lam_defs.data, "");
+    if (cg->lam_protos.len) insert_at(cg, list_pos, cg->lam_protos.data, "");
     if (cg->nlists || cg->nmaps) {
         insert_at(cg, list_pos, cg->lists.data, "");
         StrBuf fw; strbuf_init(&fw);
@@ -2053,4 +2199,5 @@ void codegen_write(CodeGen *cg, FILE *fp) {
     fwrite(cg->out.data, 1, cg->out.len, fp);
 }
 
-void codegen_free(CodeGen *cg) { strbuf_free(&cg->out); strbuf_free(&cg->lists); }
+void codegen_free(CodeGen *cg) { strbuf_free(&cg->out); strbuf_free(&cg->lists);
+    strbuf_free(&cg->lam_defs); strbuf_free(&cg->lam_protos); }

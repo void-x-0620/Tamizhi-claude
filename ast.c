@@ -123,7 +123,7 @@ bool type_same(const TypeInfo *a, const TypeInfo *b) {
         case TY_MAP:
             return a->is_set == b->is_set && type_same(a->key_type, b->key_type) &&
                    type_same(a->elem_type, b->elem_type);
-        case TY_FUNC: {
+        case TY_FUNC: case TY_CLOSURE: {
             if (!type_same(a->fret, b->fret)) return false;
             const Param *x = a->fparams, *y = b->fparams;
             for (; x && y; x = x->next, y = y->next)

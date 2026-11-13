@@ -18,6 +18,7 @@ typedef enum {
     TY_CLASS,       /* vagupu: a reference to a heap object             */
     TY_FUNC,        /* seyal(T, ...) : R   — pointer to a function      */
     TY_NULL,        /* the type of 'illai'                              */
+    TY_CLOSURE,     /* Fn<(A,B): R>: function + captured environment (fparams/fret) */
     TY_MAP,         /* Map<K,V> / Set<T> (is_set): insertion-ordered hash table */
     TY_LIST,        /* List<T>: growable array, a heap reference         */
 } TypeKind;
@@ -66,7 +67,7 @@ typedef enum {
     NK_FOR, NK_DO_WHILE, NK_SWITCH,
     NK_TERNARY, NK_CAST, NK_SIZEOF, NK_NULL_LIT, NK_INCDEC, NK_STRUCT_LIT,
     NK_ENUM_DECL, NK_TYPEDEF_DECL,
-    NK_TRY, NK_THROW, NK_LIST_NEW, NK_FOREACH,
+    NK_TRY, NK_THROW, NK_LIST_NEW, NK_FOREACH, NK_LAMBDA,
 
     /* object orientation */
     NK_CLASS_DECL, NK_NEW, NK_MCALL, NK_THIS, NK_SUPER, NK_CTOR_CALL,
@@ -92,6 +93,10 @@ typedef struct Node Node;
 typedef struct NodeList { Node *node; struct NodeList *next; } NodeList;
 
 typedef struct Param { const char *name; TypeInfo *type; struct Param *next; } Param;
+/* A local variable a lambda uses from its enclosing function (captured by value). */
+typedef struct Capture {
+    const char *name; TypeInfo *type; void *sym; struct Capture *next;
+} Capture;
 /* A struct/union field, or a class field. */
 typedef struct Field {
     const char *name;
@@ -180,14 +185,16 @@ struct Node {
         struct { double value; } float_lit;
         struct { const char *value; } string_lit;
         struct { bool value; } bool_lit;
-        struct { const char *name; const char *cname; } ident;   /* cname: C binding used as a value */
+        struct { const char *name; const char *cname; void *capsym; } ident;   /* cname: C binding used as a value */
         struct { Node *target; Node *value; int op; } assign;   /* op: BinOp or BOP_NONE */
         struct { BinOp op; Node *left; Node *right; } binary;
         struct { UnaryOp op; Node *operand; } unary;
         struct { const char *name; NodeList *args;
                  const char *cname;             /* set for C bindings */
-                 struct Param *params; } call;  /* callee's parameters (sema) */
+                 struct Param *params;
+                 void *capsym; bool is_closure; } call;  /* callee's parameters (sema) */
         struct { Node *array; Node *index; } index;
+        struct { Node *fn; Capture *caps; int ncap; int id; } lambda;   /* seyal (...) { } expression */
         struct { Node *object; const char *field;
                  int hops;                 /* parent links to follow (inheritance) */
                  bool is_static;           /* static class field: a global */
@@ -223,6 +230,7 @@ struct Node {
         struct { Node *object; const char *method; NodeList *args;
                  Method *resolved; bool is_static_call, is_super_call;
                  struct Param *fparams;
+                 bool closure_field;
                  int builtin; } mcall;       /* builtin: List method id (0 = none) */   /* fparams: struct callback field */
         struct { NodeList *args; Method *ctor; } ctor_call;
 

@@ -57,6 +57,7 @@ typedef struct {
     Method     *cur_method;
     Node       *ctor_call;     /* the one legal thandhai(...) call, if any */
     int         loop_depth;    /* loops + switches, for diagnostics */
+    void       *lam;           /* innermost lambda being checked (LambdaCtx) */
 } Sema;
 
 void sema_init(Sema *s, Arena *arena, const char *filename);

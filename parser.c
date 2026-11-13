@@ -521,6 +521,24 @@ static void close_angle(Parser *p) {
 
 static TypeInfo *parse_collection_type(Parser *p, Token name) {
     if (name.type != TOK_IDENT || !check(p, TOK_LT)) return NULL;
+    if (name.length == 2 && !memcmp(name.start, "Fn", 2)) {      /* Fn<(A, B): R> */
+        advance(p);
+        expect(p, TOK_LPAREN);
+        Param *head = NULL, *tail = NULL;
+        while (!check(p, TOK_RPAREN) && !check(p, TOK_EOF)) {
+            Param *par = param_new(p->arena, "_", parse_type(p));
+            if (tail) tail->next = par; else head = par;
+            tail = par;
+            if (p->panic || !match(p, TOK_COMMA)) break;
+        }
+        expect(p, TOK_RPAREN);
+        TypeInfo *ret = &ty_void;
+        if (match(p, TOK_COLON)) ret = parse_type(p);
+        close_angle(p);
+        TypeInfo *t = type_func(p->arena, head, ret);
+        t->kind = TY_CLOSURE;
+        return t;
+    }
     bool list = name.length == 4 && !memcmp(name.start, "List", 4);
     bool set  = name.length == 3 && !memcmp(name.start, "Set", 3);
     bool map  = name.length == 3 && !memcmp(name.start, "Map", 3);
@@ -1351,13 +1369,9 @@ static Node *parse_primary(Parser *p) {
             lambda_name_pending = arena_strdup(p->arena, nm);
             Node *fn = parse_func_decl(p, true);
             fn->is_lambda = true;
-            NodeList *cell = arena_alloc(p->arena, sizeof *cell);
-            cell->node = fn; cell->next = NULL;
-            if (p->lam_tail) p->lam_tail->next = cell; else p->lam_head = cell;
-            p->lam_tail = cell;
-            Node *id = node_new(p->arena, NK_IDENT, tok.line, tok.col);
-            id->ident.name = fn->func_decl.name;
-            return id;
+            Node *lam = node_new(p->arena, NK_LAMBDA, tok.line, tok.col);
+            lam->lambda.fn = fn;
+            return lam;
         }
         case TOK_INT_LIT: {
             advance(p);

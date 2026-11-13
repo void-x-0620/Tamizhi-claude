@@ -29,6 +29,8 @@
 
 #include "ast.h"
 
+typedef struct LamFrame { Capture *caps; struct LamFrame *outer; } LamFrame;
+
 typedef struct {
     StrBuf      out;
     int         indent;
@@ -45,6 +47,11 @@ typedef struct {
     int         nlists, nmaps;
     const char *map_keys[256];
     const char *list_keys[256];
+    StrBuf      lam_defs, lam_protos;   /* lambda bodies / their prototypes    */
+    int         nlams, nadapt;
+    bool        uses_closure;           /* Fn<...> values need tz_Fn           */
+    struct LamFrame *lam;               /* lambda whose body is being emitted  */
+    const char *adapt_keys[64];
     Node       *prog;        /* the program being generated                    */
     TypeInfo   *ret_type;    /* return type of the function being generated    */
     Node       *cur_class;   /* class whose method is being generated          */
