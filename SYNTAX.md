@@ -401,7 +401,49 @@ vagupu Circ : Shape { ... }                  # or interfaces only
 - Calls through an interface are dispatched by the object's real class. A null
   interface value is caught as a runtime error. Interfaces cannot extend each other.
 
-## 15. Not supported (on purpose or yet)
+## 15. Version 2.9: tuples, Dict, generics
+
+**Dict / Set.** `Dict<K, V>` is another name for `Map<K, V>`; `Set<T>` is as before.
+
+**Tuples** hold a fixed number of values of different types.
+
+```
+seyal divmod(a: int, b: int): (int, int) { kudu (a / b, a % b); }
+edu t = divmod(17, 5);
+pathi("%d %d", t.0, t.1);          # elements are .0 .1 ... ; t.0 = 10 assigns
+edu (q, r) = divmod(100, 7);       # destructuring; use _ to skip an element
+edu xs = puthu List<(string, int)>();   # tuples work inside List, Map, fields, ...
+```
+A tuple has 2 to 16 elements. Two tuples with the same element types are the same type.
+
+**Generics** make functions, classes and structs that work for any type. A generic
+declaration is checked each time it is used with concrete types.
+
+```
+seyal first<T>(xs: List<T>): T { kudu xs.get(0); }
+first(xs)                  # T is inferred from the arguments
+first<int>(xs)             # or written out
+
+vagupu Box<T> {
+    v: T;
+    uruvaakku(x: T) { ithu.v = x; }
+    seyal get(): T { kudu ithu.v; }
+}
+edu b = puthu Box<int>(5);
+edu nested = puthu Box<Box<string>>(puthu Box<string>("hi"));
+
+kattamaipu Pair<A, B> { first: A; second: B; }
+edu p = Pair<int, string> { first: 1, second: "x" };
+```
+- A generic must be declared before it is used with `<...>` (a generic function may be called
+  by inference from anywhere in the program).
+- Inference looks at the arguments only; a type parameter that appears nowhere in the
+  parameters (for example just the return type) must be written out: `make<int>()`.
+- A generic class cannot extend a generic class yet, and type parameters cannot have
+  constraints: using `<` on a type that lacks it is reported as an error for that instance.
+- `nool/collections.tzh` has `Stack<T>`, `Queue<T>`, `Pair<A, B>`, `min_of`, `max_of`, `swap_values`.
+
+## 16. Not supported (on purpose or yet)
 
 `goto`, bit-fields, the comma operator, inline assembly, interfaces, user generics, `finally`, constructor/method overloading, multiple inheritance, generics,
 pointer-to-const (`nilai` applies to the variable itself), `nilai` struct/class

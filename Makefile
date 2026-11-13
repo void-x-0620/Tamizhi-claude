@@ -103,6 +103,10 @@ test: $(TARGET) stdlib
 	run "interfaces" tests/v21/iface.expected $(BIN) tests/v21/iface.tz --no-gc -o $$tmp/out; \
 	run "stdlib: fs/regex/hash/..." tests/v21/stdlib2.expected $(BIN) tests/v21/stdlib2.tz --no-gc -o $$tmp/out; \
 	run "stdlib: json" tests/v21/json.expected $(BIN) tests/v21/json.tz --no-gc -o $$tmp/out; \
+	run "tuples" tests/v21/tuple.expected $(BIN) tests/v21/tuple.tz --no-gc -o $$tmp/out; \
+	run "Dict alias" tests/v21/dict.expected $(BIN) tests/v21/dict.tz --no-gc -o $$tmp/out; \
+	run "generics" tests/v21/generic.expected $(BIN) tests/v21/generic.tz --no-gc -o $$tmp/out; \
+	run "generic collections" tests/v21/collections.expected $(BIN) tests/v21/collections.tz --no-gc -o $$tmp/out; \
 	run "abstract classes" tests/v21/abstract.expected $(BIN) tests/v21/abstract.tz --no-gc -o $$tmp/out; \
 	run "lambdas" tests/v21/lambda.expected $(BIN) tests/v21/lambda.tz --no-gc -o $$tmp/out; \
 	run "standard library" tests/v21/stdlib.expected $(BIN) tests/v21/stdlib.tz --no-gc -o $$tmp/out; \

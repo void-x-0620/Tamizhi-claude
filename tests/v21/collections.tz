@@ -1,0 +1,15 @@
+serku "nool/all.tzh";
+seyal main(): int {
+    edu s = puthu Stack<string>();
+    s.push("a"); s.push("b"); s.push("c");
+    pathi("%s %d\n", s.pop(), s.size());
+    edu q = puthu Queue<int>();
+    q.push(1); q.push(2); q.push(3);
+    edu q1 = q.pop();
+    edu q2 = q.pop();
+    pathi("%d %d %d\n", q1, q2, q.size());
+    pathi("%d %.1f\n", max_of(3, 8), min_of(2.5, 0.5));
+    edu pr = Pair<string, int> { first: "k", second: 9 };
+    pathi("%s %d %d\n", pr.first, pr.second, s.is_empty());
+    kudu 0;
+}

@@ -1,0 +1,2 @@
+vagupu Box<T> { v: T; }
+seyal main(): int { edu b = puthu Box<int, int>(); kudu 0; }

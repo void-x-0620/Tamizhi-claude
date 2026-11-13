@@ -58,6 +58,9 @@ typedef struct {
     Node       *ctor_call;     /* the one legal thandhai(...) call, if any */
     int         loop_depth;    /* loops + switches, for diagnostics */
     void       *lam;           /* innermost lambda being checked (LambdaCtx) */
+    Node       *program;       /* the program node: tuple structs are appended to it */
+    int         ntuples;       /* tuple structs made so far */
+    struct TupleReg *tuples;   /* registry of them */
 } Sema;
 
 void sema_init(Sema *s, Arena *arena, const char *filename);

@@ -59,6 +59,12 @@ typedef struct {
     bool    binding;      /* parsing a binding file: only veli/serku allowed */
     bool    saw_header;   /* a 'veli "x.h"' came before: prototypes trusted */
     int nest;                        /* recursion depth guard */
+    const char *tp_names[8];         /* generics: bound type parameters ... */
+    TypeInfo   *tp_types[8];        /* ... and what they stand for          */
+    int         tp_n;
+    bool        reg_mode;           /* reading a template's signature (no instantiation) */
+    const char *inst_name;          /* instantiating: the mangled name of the declaration */
+    NodeListBuilder pend;            /* extra statements produced by one statement (destructuring) */
     NodeList *lam_head, *lam_tail;   /* lifted lambdas, appended to the program */
     ImportSet *imports;   /* shared by the main file and everything it imports */
 } Parser;
@@ -67,6 +73,20 @@ typedef struct {
  * standard library lives in one of them). Call before parsing. */
 void  parser_add_lib_dir(const char *dir);
 void  parser_init(Parser *p, Lexer *L, Arena *arena);
+
+/* Generics: templates are kept as source text and re-parsed with the type
+ * parameters bound, once per distinct list of type arguments. */
+typedef struct GTemplate GTemplate;
+GTemplate  *generic_find(const char *name);
+bool        generic_is_func(GTemplate *t);
+int         generic_nparams(GTemplate *t);
+const char *generic_pname(GTemplate *t, int i);
+const char *generic_tname(GTemplate *t);
+Param      *generic_fparams(GTemplate *t);
+const char *generic_inst_name(Arena *a, GTemplate *t, TypeInfo **args);
+bool        generic_instantiate(Arena *a, GTemplate *t, TypeInfo **args);   /* false: existed */
+bool        generic_inst_info(const char *inst, GTemplate **t, TypeInfo ***args, int *n);
+NodeList   *generic_take_queue(void);
 Node *parse_program(Parser *p);
 
 #endif /* PARSER_H */

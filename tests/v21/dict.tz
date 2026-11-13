@@ -1,0 +1,9 @@
+seyal main(): int {
+    edu d = puthu Dict<string, int>();
+    d.put("a", 1);
+    pathi("%d\n", d.get("a"));
+    edu e: Dict<int, string> = puthu Dict<int, string>();
+    e.put(1, "x");
+    pathi("%s\n", e.get(1));
+    kudu 0;
+}

@@ -106,6 +106,7 @@ TypeInfo *type_new(Arena *a, TypeKind kind) {
     t->array_size = -1;
     t->tname = t->cname = NULL; t->bits = 0; t->is_unsigned = false;
     t->fparams = NULL; t->fret = NULL; t->key_type = NULL; t->is_set = false;
+    t->tup = NULL; t->ntup = 0;
     return t;
 }
 

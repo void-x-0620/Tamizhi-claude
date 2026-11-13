@@ -21,6 +21,7 @@ typedef enum {
     TY_CLOSURE,     /* Fn<(A,B): R>: function + captured environment (fparams/fret) */
     TY_MAP,         /* Map<K,V> / Set<T> (is_set): insertion-ordered hash table */
     TY_LIST,        /* List<T>: growable array, a heap reference         */
+    TY_TUPLE,       /* (A, B, ...) as written; sema turns it into a struct */
 } TypeKind;
 
 typedef struct TypeInfo TypeInfo;
@@ -39,6 +40,9 @@ struct TypeInfo {
     /* TY_FUNC */
     struct Param *fparams;
     TypeInfo    *fret;
+    /* TY_TUPLE (parser only) */
+    TypeInfo   **tup;
+    int          ntup;
 };
 
 /* Shared singletons for the built-in types (never freed, never mutated).
@@ -67,7 +71,7 @@ typedef enum {
     NK_FOR, NK_DO_WHILE, NK_SWITCH,
     NK_TERNARY, NK_CAST, NK_SIZEOF, NK_NULL_LIT, NK_INCDEC, NK_STRUCT_LIT,
     NK_ENUM_DECL, NK_TYPEDEF_DECL,
-    NK_TRY, NK_THROW, NK_LIST_NEW, NK_FOREACH, NK_LAMBDA,
+    NK_TRY, NK_THROW, NK_LIST_NEW, NK_FOREACH, NK_LAMBDA, NK_TUPLE_LIT,
 
     /* object orientation */
     NK_CLASS_DECL, NK_NEW, NK_MCALL, NK_THIS, NK_SUPER, NK_CTOR_CALL,
@@ -215,6 +219,7 @@ struct Node {
         struct { TypeInfo *of_type; Node *expr; } size_of;   /* one is set */
         struct { Node *operand; bool is_inc, prefix; } incdec;
         struct { const char *name; FieldInit *inits; } struct_lit;
+        struct { NodeList *items; } tuple_lit;
         struct { const char *name; Enumerator *items; } enum_decl;
         struct { const char *name; TypeInfo *target; } typedef_decl;
 

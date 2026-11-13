@@ -1,0 +1,26 @@
+seyal divmod(a: int, b: int): (int, int) { kudu (a / b, a % b); }
+seyal info(): (string, int, float) { kudu ("Sibi", 30, 1.5); }
+kattamaipu Pair { t: (int, string); }
+seyal main(): int {
+    edu t = divmod(17, 5);
+    pathi("%d %d\n", t.0, t.1);
+    edu (q, r) = divmod(100, 7);
+    pathi("%d %d\n", q, r);
+    edu (name, age, _) = info();
+    pathi("%s %d\n", name, age);
+    edu u: (int, int) = (1, 2);
+    u.0 = 10;
+    pathi("%d %d\n", u.0, u._1);
+    edu xs = puthu List<(string, int)>();
+    xs.push(("a", 1)); xs.push(("b", 2));
+    ovvoru (edu p ulle xs) { pathi("%s=%d ", p.0, p.1); }
+    pathi("\n");
+    edu m = puthu Map<string, (int, int)>();
+    m.put("k", (3, 4));
+    pathi("%d\n", m.get("k").1);
+    edu pr = Pair { t: (7, "seven") };
+    pathi("%s\n", pr.t.1);
+    edu n = ((1, 2), 3);
+    pathi("%d\n", n.0.1);
+    kudu 0;
+}

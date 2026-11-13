@@ -3,6 +3,7 @@
  */
 #include "parser.h"
 #include <errno.h>
+#include <stdarg.h>
 #include <limits.h>
 #include <stdlib.h>
 
@@ -13,6 +14,8 @@ static Node *parse_var_decl(Parser *p, int quals);
 static Node *parse_enum_decl(Parser *p);
 static Node *parse_typedef_decl(Parser *p);
 static Node *parse_class_decl(Parser *p);
+static int   parse_tparams(Parser *p, const char **names);
+static Node *parse_generic_template(Parser *p, int kind, Token first, const char *name);
 static Node *parse_for_stmt(Parser *p);
 static Node *parse_do_stmt(Parser *p);
 static Node *parse_try_stmt(Parser *p);
@@ -139,6 +142,8 @@ void parser_init(Parser *p, Lexer *L, Arena *arena) {
     p->binding = false;
     p->saw_header = false;
     p->lam_head = p->lam_tail = NULL;
+    p->pend.head = p->pend.tail = NULL;
+    p->tp_n = 0; p->reg_mode = false; p->inst_name = NULL;
     p->nest = 0;
     ast_current_file = L->filename;
     p->imports = arena_alloc(arena, sizeof(ImportSet));
@@ -169,6 +174,8 @@ Node *parse_program(Parser *p) {
         if (p->consumed == before && !check(p, TOK_EOF)) advance(p);
     }
     for (NodeList *it = p->lam_head; it; it = it->next) nlb_push(p->arena, &b, it->node);
+    if (p->imports->depth == 0)                     /* generic instances made while parsing */
+        for (NodeList *it = generic_take_queue(); it; it = it->next) nlb_push(p->arena, &b, it->node);
     root->program.decls = b.head;
     return root;
 }
@@ -435,7 +442,14 @@ static Node *parse_func_decl(Parser *p, bool is_static) {
     Token name = {0};
     const char *fname;
     if (lambda_name_pending) { fname = lambda_name_pending; lambda_name_pending = NULL; }
-    else { name = expect(p, TOK_IDENT); fname = lexeme(p, name); }
+    else {
+        name = expect(p, TOK_IDENT); fname = lexeme(p, name);
+        if (check(p, TOK_LT)) {                         /* seyal name<T>(...) : a generic function */
+            if (!p->inst_name) return parse_generic_template(p, 0, kw, fname);
+            const char *skip[8]; parse_tparams(p, skip);   /* instantiating: parameters already bound */
+        }
+        if (p->inst_name) { fname = p->inst_name; p->inst_name = NULL; }
+    }
     expect(p, TOK_LPAREN);
 
     Param *head = NULL, *tail = NULL;
@@ -469,6 +483,12 @@ static Node *parse_func_decl(Parser *p, bool is_static) {
 static Node *parse_struct_decl(Parser *p, bool is_union) {
     Token kw   = expect(p, is_union ? TOK_INAIPPU : TOK_KATTAMAIPU);
     Token name = expect(p, TOK_IDENT);
+    const char *sname = lexeme(p, name);
+    if (check(p, TOK_LT)) {
+        if (!p->inst_name) return parse_generic_template(p, 2, kw, sname);
+        const char *skip[8]; parse_tparams(p, skip);
+    }
+    if (p->inst_name) { sname = p->inst_name; p->inst_name = NULL; }
     expect(p, TOK_LBRACE);
 
     Field *head = NULL, *tail = NULL;
@@ -484,7 +504,7 @@ static Node *parse_struct_decl(Parser *p, bool is_union) {
     expect(p, TOK_RBRACE);
 
     Node *n = node_new(p->arena, NK_STRUCT_DECL, kw.line, kw.col);
-    n->struct_decl.name   = lexeme(p, name);
+    n->struct_decl.name   = sname;
     n->struct_decl.fields = head;
     n->struct_decl.is_union = is_union;
     return n;
@@ -522,6 +542,201 @@ static void close_angle(Parser *p) {
     }
 }
 
+
+/* ─── Generics ─────────────────────────────────────────────────────────── */
+static const char *arena_fmt(Arena *a, const char *fmt, ...) {
+    char buf[512];
+    va_list ap; va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    return arena_strdup(a, buf);
+}
+
+struct GTemplate {
+    const char *name;
+    int         kind;                 /* 0 function, 1 class, 2 struct/union */
+    int         nparams;
+    const char *pnames[8];
+    const char *text; size_t len;     /* the whole declaration's source */
+    int         line, col;
+    const char *file;
+    Param      *fparams;              /* functions: signature with the parameters as markers */
+    struct GTemplate *next;
+};
+typedef struct GInst { const char *name; GTemplate *t; TypeInfo **args; int n; struct GInst *next; } GInst;
+static GTemplate *g_templates;
+static GInst     *g_insts;
+static NodeListBuilder g_queue;
+
+GTemplate *generic_find(const char *name) {
+    for (GTemplate *t = g_templates; t; t = t->next) if (!strcmp(t->name, name)) return t;
+    return NULL;
+}
+bool generic_is_func(GTemplate *t) { return t->kind == 0; }
+int  generic_nparams(GTemplate *t) { return t->nparams; }
+const char *generic_pname(GTemplate *t, int i) { return t->pnames[i]; }
+const char *generic_tname(GTemplate *t) { return t->name; }
+Param *generic_fparams(GTemplate *t) { return t->fparams; }
+NodeList *generic_take_queue(void) { NodeList *q = g_queue.head; g_queue.head = g_queue.tail = NULL; return q; }
+bool generic_inst_info(const char *inst, GTemplate **t, TypeInfo ***args, int *n) {
+    for (GInst *i = g_insts; i; i = i->next)
+        if (!strcmp(i->name, inst)) { *t = i->t; *args = i->args; *n = i->n; return true; }
+    return false;
+}
+
+static const char *mangle(Arena *a, TypeInfo *t) {
+    if (!t) return "void";
+    switch (t->kind) {
+        case TY_INT:    return t->tname ? t->tname : "int";
+        case TY_FLOAT:  return t->tname ? t->tname : "float";
+        case TY_STRING: return "string";
+        case TY_BOOL:   return "bool";
+        case TY_VOID:   return "void";
+        case TY_STRUCT: case TY_CLASS: case TY_ENUM: return t->struct_name;
+        case TY_LIST:   return arena_fmt(a, "List_%s_", mangle(a, t->elem_type));
+        case TY_MAP:    return t->is_set ? arena_fmt(a, "Set_%s_", mangle(a, t->key_type))
+                                         : arena_fmt(a, "Map_%s_%s_", mangle(a, t->key_type), mangle(a, t->elem_type));
+        case TY_ARRAY:  return arena_fmt(a, "Arr_%s_", mangle(a, t->elem_type));
+        case TY_POINTER:return arena_fmt(a, "Ptr_%s_", mangle(a, t->elem_type));
+        case TY_TUPLE: {
+            const char *out = arena_fmt(a, "Tup%d", t->ntup);
+            for (int i = 0; i < t->ntup; i++) out = arena_fmt(a, "%s_%s", out, mangle(a, t->tup[i]));
+            return out;
+        }
+        case TY_FUNC: case TY_CLOSURE: {
+            const char *out = "Fn";
+            for (Param *q = t->fparams; q; q = q->next) out = arena_fmt(a, "%s_%s", out, mangle(a, q->type));
+            return arena_fmt(a, "%s_R_%s", out, mangle(a, t->fret));
+        }
+        default: return "x";
+    }
+}
+
+const char *generic_inst_name(Arena *a, GTemplate *t, TypeInfo **args) {
+    const char *out = arena_fmt(a, "%s_", t->name);
+    for (int i = 0; i < t->nparams; i++) out = arena_fmt(a, "%s_%s", out, mangle(a, args[i]));
+    return out;
+}
+
+bool generic_instantiate(Arena *a, GTemplate *t, TypeInfo **args) {
+    const char *name = generic_inst_name(a, t, args);
+    for (GInst *i = g_insts; i; i = i->next) if (!strcmp(i->name, name)) return false;
+    static int total;
+    if (strlen(name) > 160 || ++total > 3000) {
+        report_error(t->file, t->line, t->col,
+                     "generic '%s' keeps instantiating itself with ever larger types "
+                     "(infinite recursion)", t->name);
+        fprintf(stderr, "1 error(s) found; nothing was compiled\n");
+        exit(1);
+    }
+    GInst *gi = arena_alloc(a, sizeof *gi);
+    gi->name = name; gi->t = t; gi->n = t->nparams; gi->next = g_insts;
+    gi->args = arena_alloc(a, (size_t)(t->nparams ? t->nparams : 1) * sizeof(TypeInfo *));
+    for (int i = 0; i < t->nparams; i++) gi->args[i] = args[i];
+    g_insts = gi;
+
+    char *src = arena_strndup(a, t->text, t->len);
+    Lexer lx;
+    lexer_init(&lx, src, t->file, a);
+    lx.line = t->line; lx.col = t->col;
+    const char *saved_file = ast_current_file;
+    Parser sp;
+    parser_init(&sp, &lx, a);
+    sp.imports->depth = 1;
+    for (int i = 0; i < t->nparams; i++) { sp.tp_names[i] = t->pnames[i]; sp.tp_types[i] = args[i]; }
+    sp.tp_n = t->nparams;
+    sp.inst_name = name;
+    Node *d = parse_decl(&sp);
+    ast_current_file = saved_file;
+    if (!d || sp.panic) return true;
+    nlb_push(a, &g_queue, d);
+    for (NodeList *l = sp.lam_head; l; l = l->next) nlb_push(a, &g_queue, l->node);
+    return true;
+}
+
+/* '<' T, U '>' after the name of a generic declaration. */
+static int parse_tparams(Parser *p, const char **names) {
+    int n = 0;
+    expect(p, TOK_LT);
+    do {
+        Token t = expect(p, TOK_IDENT);
+        if (n == 8) { syntax_error(p, t, "at most 8 type parameters"); break; }
+        if (!p->panic) names[n++] = lexeme(p, t);
+    } while (!p->panic && match(p, TOK_COMMA));
+    close_angle(p);
+    return n;
+}
+
+/* The declaration starting at `first` is generic: remember its text. Returns NULL
+ * (there is nothing to emit until it is used). */
+static Node *parse_generic_template(Parser *p, int kind, Token first, const char *name) {
+    GTemplate *t = arena_alloc(p->arena, sizeof *t);
+    memset(t, 0, sizeof *t);
+    t->name = name; t->kind = kind;
+    t->nparams = parse_tparams(p, t->pnames);
+    t->text = first.start; t->line = first.line; t->col = first.col;
+    t->file = p->lexer->filename;
+    if (kind == 0) {                                  /* read the signature for type inference */
+        const char *sv_n[8]; TypeInfo *sv_t[8]; int sv_c = p->tp_n; bool sv_r = p->reg_mode;
+        memcpy(sv_n, p->tp_names, sizeof sv_n); memcpy(sv_t, p->tp_types, sizeof sv_t);
+        for (int i = 0; i < t->nparams; i++) {
+            TypeInfo *m = type_new(p->arena, TY_STRUCT);
+            m->struct_name = t->pnames[i];
+            p->tp_names[i] = t->pnames[i]; p->tp_types[i] = m;
+        }
+        p->tp_n = t->nparams; p->reg_mode = true;
+        expect(p, TOK_LPAREN);
+        Param *head = NULL, *tail = NULL;
+        while (!check(p, TOK_RPAREN) && !check(p, TOK_EOF)) {
+            Token pn = expect(p, TOK_IDENT);
+            TypeInfo *pt = NULL;
+            if (match(p, TOK_COLON)) pt = parse_type(p);
+            Param *par = param_new(p->arena, lexeme(p, pn), pt);
+            if (tail) tail->next = par; else head = par;
+            tail = par;
+            if (p->panic || !match(p, TOK_COMMA)) break;
+        }
+        expect(p, TOK_RPAREN);
+        if (match(p, TOK_COLON)) parse_type(p);
+        t->fparams = head;
+        memcpy(p->tp_names, sv_n, sizeof sv_n); memcpy(p->tp_types, sv_t, sizeof sv_t);
+        p->tp_n = sv_c; p->reg_mode = sv_r;
+    } else {
+        while (!check(p, TOK_LBRACE) && !check(p, TOK_EOF)) advance(p);   /* ": Parent, Iface" */
+    }
+    if (!check(p, TOK_LBRACE)) { expect(p, TOK_LBRACE); return NULL; }
+    int depth = 0; Token last = first;
+    do {
+        last = advance(p);
+        if (last.type == TOK_LBRACE) depth++;
+        else if (last.type == TOK_RBRACE) depth--;
+    } while (depth > 0 && !check(p, TOK_EOF));
+    t->len = (size_t)(last.start + last.length - first.start);
+    if (depth != 0) { syntax_error(p, last, "unterminated generic declaration"); return NULL; }
+    if (!p->panic) { t->next = g_templates; g_templates = t; }
+    return NULL;
+}
+
+/* Name<A, B> in a type position or after 'puthu': returns the instance's name. */
+static const char *parse_generic_use(Parser *p, Token at, GTemplate *t, TypeInfo **args) {
+    int n = 0;
+    expect(p, TOK_LT);
+    do {
+        if (n == 8) { syntax_error(p, peek(p), "at most 8 type arguments"); break; }
+        args[n++] = parse_type(p);
+    } while (!p->panic && match(p, TOK_COMMA));
+    close_angle(p);
+    if (n != t->nparams) {
+        syntax_error(p, at, "'%s' takes %d type argument%s, not %d", t->name, t->nparams,
+                     t->nparams == 1 ? "" : "s", n);
+        return t->name;
+    }
+    const char *nm = generic_inst_name(p->arena, t, args);
+    if (!p->reg_mode) generic_instantiate(p->arena, t, args);
+    return nm;
+}
+
+
 static TypeInfo *parse_collection_type(Parser *p, Token name) {
     if (name.type != TOK_IDENT || !check(p, TOK_LT)) return NULL;
     if (name.length == 2 && !memcmp(name.start, "Fn", 2)) {      /* Fn<(A, B): R> */
@@ -544,7 +759,8 @@ static TypeInfo *parse_collection_type(Parser *p, Token name) {
     }
     bool list = name.length == 4 && !memcmp(name.start, "List", 4);
     bool set  = name.length == 3 && !memcmp(name.start, "Set", 3);
-    bool map  = name.length == 3 && !memcmp(name.start, "Map", 3);
+    bool map  = (name.length == 3 && !memcmp(name.start, "Map", 3)) ||
+                (name.length == 4 && !memcmp(name.start, "Dict", 4));     /* Dict = Map */
     if (!list && !set && !map) return NULL;
     advance(p);
     TypeInfo *first = parse_type(p), *t;
@@ -571,7 +787,20 @@ static TypeInfo *parse_type(Parser *p) {
     Token tok = peek(p);
     TypeInfo *base;
 
-    if (tok.type == TOK_SEYAL) {                       /* function pointer */
+    if (tok.type == TOK_LPAREN) {                      /* tuple type (int, string) */
+        advance(p);
+        TypeInfo *elems[16]; int ne = 0;
+        do {
+            if (ne == 16) { syntax_error(p, peek(p), "a tuple has at most 16 elements"); break; }
+            elems[ne++] = parse_type(p);
+        } while (!p->panic && match(p, TOK_COMMA));
+        expect(p, TOK_RPAREN);
+        if (ne < 2) syntax_error(p, tok, "a tuple type needs at least two element types");
+        base = type_new(p->arena, TY_TUPLE);
+        base->ntup = ne;
+        base->tup = arena_alloc(p->arena, (size_t)(ne ? ne : 1) * sizeof(TypeInfo *));
+        for (int i = 0; i < ne; i++) base->tup[i] = elems[i];
+    } else if (tok.type == TOK_SEYAL) {                       /* function pointer */
         advance(p);
         expect(p, TOK_LPAREN);
         Param *head = NULL, *tail = NULL;
@@ -592,7 +821,26 @@ static TypeInfo *parse_type(Parser *p) {
         return &ty_unknown;
     } else {
         advance(p);
-        base = builtin_type(tok.start, tok.length);
+        base = NULL;
+        for (int i = 0; i < p->tp_n; i++)                 /* a bound type parameter */
+            if (strlen(p->tp_names[i]) == (size_t)tok.length && !memcmp(p->tp_names[i], tok.start, (size_t)tok.length))
+                base = p->tp_types[i];
+        GTemplate *gt = base ? NULL : generic_find(lexeme(p, tok));
+        if (gt && gt->kind != 0 && check(p, TOK_LT)) {    /* Box<int> */
+            TypeInfo *gargs[8];
+            const char *inst = parse_generic_use(p, tok, gt, gargs);
+            base = type_new(p->arena, TY_STRUCT);
+            if (p->reg_mode) {                            /* inference pattern: Box with its arguments */
+                base->struct_name = gt->name;
+                base->ntup = gt->nparams;
+                base->tup = arena_alloc(p->arena, (size_t)gt->nparams * sizeof(TypeInfo *));
+                for (int i = 0; i < gt->nparams; i++) base->tup[i] = gargs[i];
+            } else {
+                base->struct_name = inst;
+            }
+            goto suffixes;
+        }
+        if (!base) base = builtin_type(tok.start, tok.length);
         TypeInfo *coll = base ? NULL : parse_collection_type(p, tok);
         if (coll) {
             base = coll;
@@ -602,6 +850,7 @@ static TypeInfo *parse_type(Parser *p) {
         }
     }
 
+suffixes:;
     /* int[2][3] is an array of 2 arrays of 3 ints (like C): the first
      * bracket is the outermost, so later ones are pushed inwards. */
     TypeInfo *arr_tail = NULL;
@@ -697,10 +946,17 @@ static Param *parse_params(Parser *p) {
 }
 
 static Node *parse_class_decl(Parser *p) {
+    Token first = peek(p);
     bool is_iface = check(p, TOK_IDAIMUGAM);
     bool is_abs = is_iface || match(p, TOK_MOOLAM);
     Token kw   = is_iface ? advance(p) : expect(p, TOK_VAGUPU);
     Token name = expect(p, TOK_IDENT);
+    const char *cname = lexeme(p, name);
+    if (check(p, TOK_LT)) {
+        if (!p->inst_name) return parse_generic_template(p, 1, first, cname);
+        const char *skip[8]; parse_tparams(p, skip);
+    }
+    if (p->inst_name) { cname = p->inst_name; p->inst_name = NULL; }
     const char *parent = NULL;
     const char **inames = NULL; int nin = 0;
     if (match(p, TOK_COLON)) {                    /* : Parent, Interface, Interface */
@@ -738,7 +994,7 @@ static Node *parse_class_decl(Parser *p) {
             if (is_static) syntax_error(p, t, "a constructor cannot be 'thangu'");
             Method *m = arena_alloc(p->arena, sizeof *m);
             memset(m, 0, sizeof *m);
-            m->name = lexeme(p, name);
+            m->name = cname;
             m->is_ctor = true; m->access = acc; m->slot = -1;
             m->line = t.line; m->col = t.col;
             m->params = parse_params(p);
@@ -804,7 +1060,7 @@ static Node *parse_class_decl(Parser *p) {
     expect(p, TOK_RBRACE);
 
     Node *n = node_new(p->arena, NK_CLASS_DECL, kw.line, kw.col);
-    n->class_decl.name    = lexeme(p, name);
+    n->class_decl.name    = cname;
     n->class_decl.parent  = parent;
     n->class_decl.is_interface = is_iface;
     n->class_decl.inames = inames; n->class_decl.ninames = nin;
@@ -837,6 +1093,8 @@ static Node *parse_block_inner(Parser *p) {
         size_t before = p->consumed;
         Node *s = parse_stmt(p);
         if (s) nlb_push(p->arena, &b, s);
+        for (NodeList *pn = p->pend.head; pn; pn = pn->next) nlb_push(p->arena, &b, pn->node);
+        p->pend.head = NULL; p->pend.tail = NULL;
         if (p->consumed == before && !check(p, TOK_RBRACE) &&
             !check(p, TOK_EOF))
             advance(p);
@@ -853,10 +1111,51 @@ static Node *parse_stmt(Parser *p) {
     p->nest--;
     return r;
 }
+/* edu (a, b, _) = expr;   ==>   edu _tupN = expr; edu a = _tupN._0; edu b = _tupN._1; */
+static Node *parse_destructure(Parser *p) {
+    static int counter;
+    Token kw = expect(p, TOK_EDU);
+    expect(p, TOK_LPAREN);
+    Token names[16]; int nn = 0;
+    do {
+        if (nn == 16) { syntax_error(p, peek(p), "too many names"); break; }
+        names[nn++] = expect(p, TOK_IDENT);
+    } while (!p->panic && match(p, TOK_COMMA));
+    expect(p, TOK_RPAREN);
+    expect(p, TOK_EQ);
+    Node *init = parse_expr(p);
+    expect(p, TOK_SEMICOLON);
+    if (p->panic) return NULL;
+    char *tmp = arena_alloc(p->arena, 24);
+    snprintf(tmp, 24, "_tup%d", counter++);
+    Node *first = node_new(p->arena, NK_VAR_DECL, kw.line, kw.col);
+    first->var_decl.name = tmp; first->var_decl.init = init;
+    for (int i = 0; i < nn; i++) {
+        if (names[i].length == 1 && names[i].start[0] == '_') continue;
+        Node *obj = node_new(p->arena, NK_IDENT, names[i].line, names[i].col);
+        obj->ident.name = tmp;
+        Node *m = node_new(p->arena, NK_MEMBER, names[i].line, names[i].col);
+        m->member.object = obj;
+        char *fld = arena_alloc(p->arena, 16);
+        snprintf(fld, 16, "_%d", i);
+        m->member.field = fld;
+        Node *vd = node_new(p->arena, NK_VAR_DECL, names[i].line, names[i].col);
+        vd->var_decl.name = lexeme(p, names[i]);
+        vd->var_decl.init = m;
+        nlb_push(p->arena, &p->pend, vd);
+    }
+    return first;
+}
+
 static Node *parse_stmt_inner(Parser *p) {
     Token tok = peek(p);
     switch (tok.type) {
         case TOK_EDU: {
+            Lexer save = *p->lexer; size_t sc = p->consumed;
+            advance(p);
+            bool destructure = check(p, TOK_LPAREN);
+            *p->lexer = save; p->consumed = sc;
+            if (destructure) return parse_destructure(p);
             Node *n = parse_var_decl(p, 0);
             expect(p, TOK_SEMICOLON);
             return n;
@@ -1330,6 +1629,14 @@ static Node *parse_unary_inner(Parser *p) {
         case TOK_PUTHU: {
             advance(p);
             Token name = expect(p, TOK_IDENT);
+            GTemplate *gt = check(p, TOK_LT) ? generic_find(lexeme(p, name)) : NULL;
+            if (gt && gt->kind == 1) {                      /* puthu Box<int>(...) */
+                TypeInfo *ga[8];
+                Node *n = node_new(p->arena, NK_NEW, t.line, t.col);
+                n->new_expr.name = parse_generic_use(p, name, gt, ga);
+                n->new_expr.args = parse_call_args(p);
+                return n;
+            }
             TypeInfo *ct = parse_collection_type(p, name);
             if (ct) {
                 Node *ln = node_new(p->arena, NK_LIST_NEW, t.line, t.col);
@@ -1360,6 +1667,28 @@ static Node *parse_postfix(Parser *p) {
             node = n;
         } else if (check(p, TOK_DOT)) {
             Token dot = advance(p);
+            if (check(p, TOK_INT_LIT) || check(p, TOK_FLOAT_LIT)) {      /* t.0  t.1  and t.0.1 */
+                Token nt = advance(p);
+                char digits[48];
+                int dl = nt.length < 47 ? nt.length : 47;
+                memcpy(digits, nt.start, (size_t)dl); digits[dl] = '\0';
+                char *dot2 = strchr(digits, '.');
+                if (strspn(digits, "0123456789.") != (size_t)dl || (dot2 && strchr(dot2 + 1, '.'))) {
+                    syntax_error(p, nt, "expected a field name or a tuple index after '.'");
+                } else {
+                    char *parts[2] = { digits, dot2 ? dot2 + 1 : NULL };
+                    if (dot2) *dot2 = '\0';
+                    for (int k = 0; k < 2 && parts[k]; k++) {
+                        Node *n = node_new(p->arena, NK_MEMBER, dot.line, dot.col);
+                        n->member.object = node;
+                        char *nm = arena_alloc(p->arena, strlen(parts[k]) + 2);
+                        sprintf(nm, "_%s", parts[k]);
+                        n->member.field = nm;
+                        node = n;
+                    }
+                }
+                continue;
+            }
             Token fn = expect(p, TOK_IDENT);
             Node *n = node_new(p->arena, NK_MEMBER, dot.line, dot.col);
             n->member.object = node;
@@ -1543,6 +1872,11 @@ static Node *parse_primary(Parser *p) {
                 n->bool_lit.value = is_true;
                 return n;
             }
+            const char *gname = NULL;                  /* first<int>(...)  Pair<int, string> { ... } */
+            if (check(p, TOK_LT)) {
+                GTemplate *gt = generic_find(lexeme(p, tok));
+                if (gt) { TypeInfo *ga[8]; gname = parse_generic_use(p, tok, gt, ga); }
+            }
             if (check(p, TOK_LBRACE)) {          /* Name { field: value, ... } */
                 advance(p);
                 FieldInit *head = NULL, *tail = NULL;
@@ -1560,17 +1894,26 @@ static Node *parse_primary(Parser *p) {
                 }
                 expect(p, TOK_RBRACE);
                 Node *n = node_new(p->arena, NK_STRUCT_LIT, tok.line, tok.col);
-                n->struct_lit.name = lexeme(p, tok);
+                n->struct_lit.name = gname ? gname : lexeme(p, tok);
                 n->struct_lit.inits = head;
                 return n;
             }
             Node *n = node_new(p->arena, NK_IDENT, tok.line, tok.col);
-            n->ident.name = lexeme(p, tok);
+            n->ident.name = gname ? gname : lexeme(p, tok);
             return n;
         }
         case TOK_LPAREN: {
             advance(p);
             Node *inner = parse_expr(p);
+            if (check(p, TOK_COMMA)) {                      /* tuple literal (a, b, ...) */
+                NodeListBuilder tb = {0};
+                nlb_push(p->arena, &tb, inner);
+                while (match(p, TOK_COMMA)) nlb_push(p->arena, &tb, parse_expr(p));
+                expect(p, TOK_RPAREN);
+                Node *tn = node_new(p->arena, NK_TUPLE_LIT, tok.line, tok.col);
+                tn->tuple_lit.items = tb.head;
+                return tn;
+            }
             expect(p, TOK_RPAREN);
             return inner;
         }

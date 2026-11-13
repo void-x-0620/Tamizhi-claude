@@ -1,0 +1,2 @@
+seyal mk<T>(): T { kudu 0; }
+seyal main(): int { mk(); kudu 0; }

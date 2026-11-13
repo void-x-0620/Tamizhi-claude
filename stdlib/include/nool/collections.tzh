@@ -1,0 +1,38 @@
+# nool/collections.tzh — generic containers and helpers, written in Tamizhi
+#   Stack<T>, Queue<T>, Pair<A, B>, and generic functions: min_of max_of swap_values
+#   edu s = puthu Stack<int>();  s.push(1);  pathi("%d", s.pop());
+
+vagupu Stack<T> {
+    items: List<T>;
+    uruvaakku() { ithu.items = puthu List<T>(); }
+    seyal push(x: T) { ithu.items.push(x); }
+    seyal pop(): T {
+        edu last = ithu.items.get(ithu.items.length - 1);
+        ithu.items.remove(ithu.items.length - 1);
+        kudu last;
+    }
+    seyal peek(): T { kudu ithu.items.get(ithu.items.length - 1); }
+    seyal size(): int { kudu ithu.items.length; }
+    seyal is_empty(): bool { kudu ithu.items.length == 0; }
+}
+
+vagupu Queue<T> {
+    items: List<T>;
+    head: int;
+    uruvaakku() { ithu.items = puthu List<T>(); ithu.head = 0; }
+    seyal push(x: T) { ithu.items.push(x); }
+    seyal pop(): T {
+        edu first = ithu.items.get(ithu.head);
+        ithu.head = ithu.head + 1;
+        kudu first;
+    }
+    seyal peek(): T { kudu ithu.items.get(ithu.head); }
+    seyal size(): int { kudu ithu.items.length - ithu.head; }
+    seyal is_empty(): bool { kudu ithu.items.length == ithu.head; }
+}
+
+kattamaipu Pair<A, B> { first: A; second: B; }
+
+seyal min_of<T>(a: T, b: T): T { @( a < b ) aga irundha { kudu a; } kudu b; }
+seyal max_of<T>(a: T, b: T): T { @( a > b ) aga irundha { kudu a; } kudu b; }
+seyal swap_values<A, B>(p: (A, B)): (B, A) { kudu (p.1, p.0); }

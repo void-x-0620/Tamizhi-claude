@@ -2,6 +2,7 @@
  * sema.c — Semantic analysis (see sema.h).
  */
 #include "sema.h"
+#include "parser.h"
 #include <limits.h>
 
 /* ─── Scopes ───────────────────────────────────────────────────────────── */
@@ -188,6 +189,7 @@ static bool is_byte(TypeInfo *t) {                 /* char-like element */
     return t && t->kind == TY_INT && t->bits == 8;
 }
 
+static const char *tuple_display(Sema *s, const char *name);
 static const char *type_str(Sema *s, TypeInfo *t) {
     if (!t) return "unknown";
     switch (t->kind) {
@@ -196,8 +198,10 @@ static const char *type_str(Sema *s, TypeInfo *t) {
         case TY_STRING:  return "string";
         case TY_BOOL:    return "bool";
         case TY_NULL:    return "illai";
-        case TY_STRUCT: case TY_ENUM: case TY_CLASS: return t->struct_name;
+        case TY_STRUCT: return tuple_display(s, t->struct_name);
+        case TY_ENUM: case TY_CLASS: return t->struct_name;
         case TY_UNKNOWN: return "unknown";
+        case TY_TUPLE:   return "tuple";
         case TY_POINTER: return tfmt(s, "%s*", type_str(s, t->elem_type));
         case TY_LIST:    return tfmt(s, "List<%s>", type_str(s, t->elem_type));
         case TY_MAP:     return t->is_set ? tfmt(s, "Set<%s>", type_str(s, t->key_type))
@@ -374,11 +378,33 @@ static void check_access(Sema *s, Access a, Node *owner, const char *what,
 static void enum_resolve(Sema *s, Symbol *y);
 static TypeInfo *expr(Sema *s, Node *n);
 static void      stmt(Sema *s, Node *n);
+static const char *infer_instance(Sema *s, GTemplate *gt, Node *call);
+static void flush_generics(Sema *s);
 
 /* Turn the parser's by-name placeholders into struct / enum / class types
  * (typedefs are expanded in place). Reports unknown names. */
+/* Tuples are ordinary structs named Tuple_N with fields _0, _1, ...; one per distinct
+ * element-type list, made on first use and appended to the program. */
+struct TupleReg { TypeInfo **elems; int n; const char *name; struct TupleReg *next; };
+static const char *tuple_name_for(Sema *s, TypeInfo **elems, int n);
+static const char *tuple_display(Sema *s, const char *name);
+
 static void resolve_type(Sema *s, TypeInfo *t, int line, int col) {
     if (!t) return;
+    if (t->kind == TY_TUPLE) {
+        for (int i = 0; i < t->ntup; i++) resolve_type(s, t->tup[i], line, col);
+        for (int i = 0; i < t->ntup; i++)
+            if (t->tup[i]->kind == TY_VOID || t->tup[i]->kind == TY_UNKNOWN) {
+                if (t->tup[i]->kind == TY_VOID)
+                    report_error(s->filename, line, col, "a tuple element cannot be void");
+                t->kind = TY_UNKNOWN;
+                return;
+            }
+        const char *nm = tuple_name_for(s, t->tup, t->ntup);
+        t->kind = TY_STRUCT;
+        t->struct_name = nm;
+        return;
+    }
     switch (t->kind) {
         case TY_ARRAY: case TY_POINTER: case TY_LIST:
             resolve_type(s, t->elem_type, line, col);
@@ -410,6 +436,13 @@ static void resolve_type(Sema *s, TypeInfo *t, int line, int col) {
     }
     Symbol *y = lookup_type(s, t->struct_name);
     if (!y) {
+        GTemplate *gt = generic_find(t->struct_name);
+        if (gt) {
+            report_error(s->filename, line, col, "'%s' is generic: write %s<%s>", t->struct_name,
+                         t->struct_name, generic_nparams(gt) == 1 ? "type" : "type, ...");
+            t->kind = TY_UNKNOWN;
+            return;
+        }
         suggest_type(s, t->struct_name);
         report_error(s->filename, line, col, "unknown type '%s'", t->struct_name);
         t->kind = TY_UNKNOWN;
@@ -1127,6 +1160,47 @@ static TypeInfo *expr(Sema *s, Node *n) {
             return n->type = &ty_usize;
         }
 
+        case NK_TUPLE_LIT: {
+            TypeInfo *elems[16]; int ne = 0;
+            for (NodeList *it = n->tuple_lit.items; it; it = it->next) {
+                if (ne == 16) {
+                    report_error(s->filename, n->line, n->col, "a tuple has at most 16 elements");
+                    return n->type = &ty_unknown;
+                }
+                TypeInfo *et = expr(s, it->node);
+                if (et->kind == TY_NULL) {
+                    report_error(s->filename, it->node->line, it->node->col,
+                                 "'illai' has no type of its own; give the tuple a declared type");
+                    et = &ty_unknown;
+                }
+                if (et->kind == TY_VOID) {
+                    report_error(s->filename, it->node->line, it->node->col,
+                                 "a tuple element cannot be void");
+                    et = &ty_unknown;
+                }
+                elems[ne++] = et;
+            }
+            for (int i = 0; i < ne; i++)
+                if (is_unknown(elems[i])) return n->type = &ty_unknown;
+            const char *nm = tuple_name_for(s, elems, ne);
+            FieldInit *head = NULL, *tail = NULL; int i = 0;
+            for (NodeList *it = n->tuple_lit.items; it; it = it->next, i++) {
+                FieldInit *fi = arena_alloc(s->arena, sizeof *fi);
+                char *fname = arena_alloc(s->arena, 16);
+                snprintf(fname, 16, "_%d", i);
+                fi->name = fname; fi->value = it->node; fi->line = it->node->line; fi->col = it->node->col;
+                fi->next = NULL;
+                if (tail) tail->next = fi; else head = fi;
+                tail = fi;
+            }
+            n->kind = NK_STRUCT_LIT;
+            n->struct_lit.name = nm;
+            n->struct_lit.inits = head;
+            TypeInfo *t = type_new(s->arena, TY_STRUCT);
+            t->struct_name = nm;
+            return n->type = t;
+        }
+
         case NK_STRUCT_LIT: {
             Symbol *y = lookup_type(s, n->struct_lit.name);
             if (!y || y->kind != SYM_STRUCT) {
@@ -1220,6 +1294,16 @@ static TypeInfo *expr(Sema *s, Node *n) {
                 }
                 n->call.builtin = 1;
                 return n->type = &ty_string;
+            }
+            if (!y) {                                        /* a generic function: infer, instantiate */
+                GTemplate *gt = generic_find(n->call.name);
+                if (gt && generic_is_func(gt)) {
+                    const char *inst = infer_instance(s, gt, n);
+                    if (!inst) { expr_list(s, n->call.args); return n->type = &ty_unknown; }
+                    n->call.name = inst;
+                    y = lookup_cap(s, inst, &n->call.capsym);
+                    if (y) y->used = true;
+                }
             }
             if (!y) {
                 suggest_symbol(s, n->call.name, true);
@@ -1445,6 +1529,11 @@ static TypeInfo *member_expr(Sema *s, Node *n) {
     Symbol *sd = lookup_type(s, st->struct_name);
     if (!sd || sd->kind != SYM_STRUCT) return &ty_unknown;
     Field *f = find_field(sd->fields, fname);
+    if (!f && !strncmp(st->struct_name, "Tuple_", 6)) {
+        report_error(s->filename, n->line, n->col, "the tuple %s has no element %s",
+                     tuple_display(s, st->struct_name), fname + 1);
+        return &ty_unknown;
+    }
     if (!f) {
         suggest_fields(sd->fields, fname);
         report_error(s->filename, n->line, n->col, "%s '%s' has no field '%s'",
@@ -1941,6 +2030,62 @@ static void func_decl(Sema *s, Node *n) {
 }
 
 /* ─── Type declarations ─────────────────────────────────────────────────── */
+static const char *tuple_display(Sema *s, const char *name) {
+    if (strncmp(name, "Tuple_", 6) != 0) return name;
+    for (struct TupleReg *r = s->tuples; r; r = r->next)
+        if (r->name == name || !strcmp(r->name, name)) {
+            const char *out = "(";
+            for (int i = 0; i < r->n; i++)
+                out = tfmt(s, "%s%s%s", out, type_str(s, r->elems[i]), i + 1 < r->n ? ", " : "");
+            return tfmt(s, "%s)", out);
+        }
+    return name;
+}
+
+static void struct_check(Sema *s, Node *n);
+static const char *tuple_name_for(Sema *s, TypeInfo **elems, int n) {
+    for (struct TupleReg *r = s->tuples; r; r = r->next) {
+        if (r->n != n) continue;
+        bool same = true;
+        for (int i = 0; i < n && same; i++) same = type_same(r->elems[i], elems[i]);
+        if (same) return r->name;
+    }
+    struct TupleReg *r = arena_alloc(s->arena, sizeof *r);
+    r->n = n;
+    r->elems = arena_alloc(s->arena, (size_t)n * sizeof(TypeInfo *));
+    for (int i = 0; i < n; i++) r->elems[i] = elems[i];
+    char *nm = arena_alloc(s->arena, 24);
+    snprintf(nm, 24, "Tuple_%d", s->ntuples++);
+    r->name = nm;
+    r->next = s->tuples; s->tuples = r;
+
+    Node *d = node_new(s->arena, NK_STRUCT_DECL, 1, 1);
+    d->struct_decl.name = nm;
+    Field *head = NULL, *tail = NULL;
+    for (int i = 0; i < n; i++) {
+        char *fname = arena_alloc(s->arena, 16);
+        snprintf(fname, 16, "_%d", i);
+        Field *f = field_new(s->arena, fname, elems[i]);
+        if (tail) tail->next = f; else head = f;
+        tail = f;
+    }
+    d->struct_decl.fields = head;
+    TypeInfo *t = type_new(s->arena, TY_STRUCT);
+    t->struct_name = nm;
+    Scope *saved_scope = s->scope;
+    s->scope = s->global;                 /* tuple structs are global, whoever asked first */
+    Symbol *y = declare(s, nm, SYM_STRUCT, t, 1, 1);
+    if (y) { y->fields = head; y->decl = d; }
+    struct_check(s, d);
+    s->scope = saved_scope;
+    NodeList *cell = arena_alloc(s->arena, sizeof *cell);
+    cell->node = d; cell->next = NULL;
+    NodeList **pp = &s->program->program.decls;
+    while (*pp) pp = &(*pp)->next;
+    *pp = cell;
+    return nm;
+}
+
 static void struct_check(Sema *s, Node *n) {
     const char *kind = n->struct_decl.is_union ? "union" : "struct";
     for (Field *f = n->struct_decl.fields; f; f = f->next) {
@@ -2265,6 +2410,106 @@ static void switch_stmt(Sema *s, Node *n) {
     s->loop_depth--;
 }
 
+static void hoist_program(Sema *s, Node *n);
+
+/* Declarations made by instantiating generics after parsing: declare them like the
+ * rest, then append them to the program so that their bodies get checked. */
+static void flush_generics(Sema *s) {
+    NodeList *q = generic_take_queue();
+    if (!q) return;
+    Node *tmp = node_new(s->arena, NK_PROGRAM, 1, 1);
+    tmp->program.decls = q;
+    Scope *saved = s->scope;
+    const char *saved_fn = s->filename;
+    s->scope = s->global;
+    hoist_program(s, tmp);
+    s->scope = saved;
+    s->filename = saved_fn;
+    NodeList **pp = &s->program->program.decls;
+    while (*pp) pp = &(*pp)->next;
+    *pp = q;
+}
+
+/* Match a template's parameter type (pattern) against an argument type, binding
+ * the type parameters. Returns false on a conflict. */
+static bool unify(Sema *s, GTemplate *gt, TypeInfo *pat, TypeInfo *act, TypeInfo **bind) {
+    if (!pat || !act || is_unknown(act)) return true;
+    if (pat->kind == TY_STRUCT) {
+        if (pat->ntup == 0) {
+            for (int i = 0; i < generic_nparams(gt); i++)
+                if (!strcmp(pat->struct_name, generic_pname(gt, i))) {
+                    if (!bind[i]) { bind[i] = act; return true; }
+                    return type_same(bind[i], act);
+                }
+            return true;                                   /* a concrete struct: checked later */
+        }
+        GTemplate *g2; TypeInfo **a2; int n2;
+        if ((act->kind != TY_STRUCT && act->kind != TY_CLASS) ||
+            !generic_inst_info(act->struct_name, &g2, &a2, &n2) || g2 == NULL ||
+            strcmp(generic_tname(g2), pat->struct_name) != 0 || n2 != pat->ntup)
+            return false;
+        for (int i = 0; i < n2; i++)
+            if (!unify(s, gt, pat->tup[i], a2[i], bind)) return false;
+        return true;
+    }
+    if (pat->kind == TY_TUPLE) {
+        if (act->kind != TY_STRUCT) return false;
+        for (struct TupleReg *r = s->tuples; r; r = r->next)
+            if (!strcmp(r->name, act->struct_name)) {
+                if (r->n != pat->ntup) return false;
+                for (int i = 0; i < r->n; i++)
+                    if (!unify(s, gt, pat->tup[i], r->elems[i], bind)) return false;
+                return true;
+            }
+        return false;
+    }
+    if (pat->kind != act->kind) {
+        if ((pat->kind == TY_FUNC || pat->kind == TY_CLOSURE) &&
+            (act->kind == TY_FUNC || act->kind == TY_CLOSURE)) goto fn;
+        return pat->kind == TY_FLOAT || pat->kind == TY_INT ? true : false;
+    }
+    switch (pat->kind) {
+        case TY_LIST: case TY_ARRAY: case TY_POINTER:
+            return unify(s, gt, pat->elem_type, act->elem_type, bind);
+        case TY_MAP:
+            return unify(s, gt, pat->key_type, act->key_type, bind) &&
+                   (pat->is_set || unify(s, gt, pat->elem_type, act->elem_type, bind));
+        case TY_FUNC: case TY_CLOSURE: fn: {
+            Param *a = pat->fparams, *b = act->fparams;
+            for (; a && b; a = a->next, b = b->next)
+                if (!unify(s, gt, a->type, b->type, bind)) return false;
+            return unify(s, gt, pat->fret, act->fret, bind);
+        }
+        default: return true;
+    }
+}
+
+static const char *infer_instance(Sema *s, GTemplate *gt, Node *call) {
+    TypeInfo *bind[8] = {0};
+    Param *par = generic_fparams(gt);
+    int idx = 1;
+    for (NodeList *a = call->call.args; a && par; a = a->next, par = par->next, idx++) {
+        TypeInfo *at = expr(s, a->node);
+        if (at->kind == TY_NULL) continue;
+        if (!unify(s, gt, par->type, at, bind)) {
+            report_error(s->filename, a->node->line, a->node->col,
+                         "argument %d of '%s': %s conflicts with the type parameters already inferred",
+                         idx, call->call.name, type_str(s, at));
+            return NULL;
+        }
+    }
+    for (int i = 0; i < generic_nparams(gt); i++)
+        if (!bind[i]) {
+            report_error(s->filename, call->line, call->col,
+                         "cannot infer the type parameter '%s' of '%s'; write %s<type>(...)",
+                         generic_pname(gt, i), call->call.name, call->call.name);
+            return NULL;
+        }
+    const char *inst = generic_inst_name(s->arena, gt, bind);
+    if (generic_instantiate(s->arena, gt, bind)) flush_generics(s);
+    return inst;
+}
+
 static void hoist_program(Sema *s, Node *n) {
     /* A: names of types */
     for (NodeList *it = n->program.decls; it; it = it->next) {
@@ -2540,9 +2785,10 @@ void sema_init(Sema *s, Arena *arena, const char *filename) {
     s->cur_method = NULL;
     s->ctor_call = NULL;
     s->loop_depth = 0;
+    s->program = NULL; s->ntuples = 0; s->tuples = NULL;
     s->scope = NULL;
     scope_push(s);
     s->global = s->scope;
 }
 
-void sema_analyse(Sema *s, Node *program) { stmt(s, program); }
+void sema_analyse(Sema *s, Node *program) { s->program = program; stmt(s, program); }

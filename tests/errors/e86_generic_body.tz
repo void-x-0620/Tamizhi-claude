@@ -1,0 +1,2 @@
+seyal bad<T>(a: T): T { kudu a + 1; }
+seyal main(): int { bad("s"); kudu 0; }

@@ -1,0 +1,36 @@
+seyal first<T>(xs: List<T>): T { kudu xs.get(0); }
+seyal swap<A, B>(p: (A, B)): (B, A) { kudu (p.1, p.0); }
+seyal apply<T, R>(x: T, f: Fn<(T): R>): R { kudu f(x); }
+seyal biggest<T>(a: T, b: T): T { @( a > b ) aga irundha { kudu a; } kudu b; }
+
+vagupu Box<T> {
+    v: T;
+    uruvaakku(x: T) { ithu.v = x; }
+    seyal get(): T { kudu ithu.v; }
+    seyal set(x: T) { ithu.v = x; }
+}
+kattamaipu Pair<A, B> { a: A; b: B; }
+
+seyal unbox<T>(b: Box<T>): T { kudu b.get(); }
+
+seyal main(): int {
+    edu xs = puthu List<int>(4, 5);
+    pathi("%d\n", first(xs));
+    edu ss = puthu List<string>("x", "y");
+    pathi("%s\n", first(ss));
+    pathi("%s %d\n", swap((1, "one")).0, swap((1, "one")).1);
+    pathi("%d\n", apply(5, seyal(n: int): int { kudu n * 3; }));
+    pathi("%d %.1f\n", biggest(3, 9), biggest<float>(2.5, 1.5));
+    edu b = puthu Box<int>(41);
+    b.set(b.get() + 1);
+    pathi("%d\n", b.get());
+    edu bs: Box<string> = puthu Box<string>("hi");
+    pathi("%s %d\n", bs.get(), unbox(b));
+    edu p = Pair<int, string> { a: 7, b: "seven" };
+    pathi("%d %s\n", p.a, p.b);
+    edu nested = puthu Box<Box<int>>(puthu Box<int>(5));
+    pathi("%d\n", nested.get().get());
+    edu lst = puthu List<Box<int>>(puthu Box<int>(1), puthu Box<int>(2));
+    pathi("%d\n", first(lst).get());
+    kudu 0;
+}

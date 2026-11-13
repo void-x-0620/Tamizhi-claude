@@ -10,3 +10,4 @@ serku "encoding.tzb";
 serku "regex.tzb";
 serku "json.tzb";
 serku "listutil.tzh";
+serku "collections.tzh";

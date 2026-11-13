@@ -1,0 +1,2 @@
+seyal big<T>(a: T, b: T): T { kudu a; }
+seyal main(): int { big(1, "x"); kudu 0; }
