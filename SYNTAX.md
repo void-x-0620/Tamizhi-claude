@@ -1,4 +1,4 @@
-# Tamizhi 2.4 — complete syntax reference
+# Tamizhi 2.5 — complete syntax reference
 
 Tamizhi is compiled to C99/GNU C and then to a native binary. Keywords are
 Tanglish (Tamil written in English letters). Every example below compiles.
@@ -315,7 +315,30 @@ next(); next();                                       # 1, 2   (the outer 'count
 * Calling a never-assigned `Fn` is a runtime error.
 * Function calls now report `'f' expects N arguments but M were given` for too many arguments as well as too few.
 
-## 12. Not supported (on purpose or yet)
+## 12. Version 2.5: strings
+
+```
+edu msg = $"Hello {name}, {age + 1} next year, pi = {pi:.2f}";   # interpolation: $"..." with {expr}
+edu a = $"{{literal braces}}";                                    # {{ and }} are literal braces
+str(42)  str(2.5)  str(true)  str(x, "05d")  str(f, ".3f")       # explicit conversion (+ printf-style format)
+```
+`{expr:format}` uses the same format as `str`: flags, width, `.precision` and one of `d x X o u c f e g s`
+(`{255:x}`, `{7:03d}`, `{pi:8.3f}`). Interpolated strings build a new heap string (like `+`).
+
+String methods (all return new strings; the original never changes):
+
+| Method | Result |
+|--------|--------|
+| `s.upper()` `s.lower()` `s.trim()` | string |
+| `s.contains(t)` `s.starts(t)` `s.ends(t)` | bool |
+| `s.find(t)` | index of the first match, or -1 |
+| `s.sub(start, len)` | substring (clamped to the string, like a slice) |
+| `s.replace(a, b)` `s.repeat(n)` | string |
+| `s.split(sep)` | `List<string>` (`"a,,b".split(",")` has 3 items; empty `sep` gives one item) |
+| `s.to_int()` `s.to_float()` | number (0 if the text is not a number) |
+| `list.join(sep)` | string, for a `List<string>` |
+
+## 13. Not supported (on purpose or yet)
 
 `goto`, bit-fields, the comma operator, inline assembly, interfaces, user generics, `finally`, constructor/method overloading, multiple inheritance, generics,
 pointer-to-const (`nilai` applies to the variable itself), `nilai` struct/class

@@ -278,6 +278,12 @@ Token lexer_next(Lexer *L) {
 
     if (isdigit((unsigned char)c)) return lex_number(L, start, line, col);
     if (c == '"')                  return lex_string(L, start, line, col);
+    if (c == '$' && peek_ch(L) == '"') {           /* $"text {expr}": interpolated string */
+        advance_ch(L);
+        Token t = lex_string(L, start, line, col);
+        if (t.type == TOK_STRING_LIT) t.type = TOK_ISTRING_LIT;
+        return t;
+    }
     if (c == '\'')                 return lex_char(L, start, line, col);
 
     if (isalpha((unsigned char)c) || c == '_') {
@@ -343,6 +349,7 @@ const char *token_type_name(TokenType t) {
         case TOK_INT_LIT:    return "integer literal";
         case TOK_FLOAT_LIT:  return "float literal";
         case TOK_STRING_LIT: return "string literal";
+        case TOK_ISTRING_LIT: return "interpolated string";
         case TOK_IDENT:      return "identifier";
         case TOK_LPAREN:     return "'('";
         case TOK_RPAREN:     return "')'";

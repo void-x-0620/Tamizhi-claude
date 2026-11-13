@@ -16,7 +16,7 @@ make asan                 # build ./tamizhi-asan (AddressSanitizer + UBSan)
 Options: `--no-warn`, `-Werror`, `--color=WHEN`, `-o <file>`, `-S` (emit C to stdout or `-o`), `-c` (object file), `-O<0-3>`,
 `-v` (per-stage timings), `--dump-tokens`, `--cc=<cmd>`, `--version`.
 
-## The language (version 2.4)
+## The language (version 2.5)
 
 The full grammar, every keyword and the operator table are in **[SYNTAX.md](SYNTAX.md)**.
 A quick tour:

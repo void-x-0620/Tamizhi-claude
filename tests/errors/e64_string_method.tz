@@ -1,0 +1,1 @@
+seyal main(): int { edu s = "a"; edu t = s.reverse(); kudu 0; }

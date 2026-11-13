@@ -826,6 +826,17 @@ static void gen_list_call(CodeGen *cg, Node *n) {
     TypeInfo *lt = n->mcall.object->type;
     TypeInfo *et = lt->elem_type;
     int id = n->mcall.builtin;
+    if (id == 8) {                                    /* List<string>.join(sep) */
+        cg->uses_str = cg->uses_heap = true;
+        const char *L = tfmt(cg, "tz_List_%d", list_index(cg, et));
+        emitf(cg, "({ %s *_l = ", L);
+        gen_expr(cg, n->mcall.object);
+        emit(cg, "; tz_s_join((const char **)_l->data, ");
+        emitf(cg, "%s_len(_l, %d), ", L, n->line);
+        gen_expr(cg, n->mcall.args->node);
+        emit(cg, "); })");
+        return;
+    }
     const char *L = tfmt(cg, "tz_List_%d", list_index(cg, et));
     Node *a1 = n->mcall.args ? n->mcall.args->node : NULL;
     Node *a2 = n->mcall.args && n->mcall.args->next ? n->mcall.args->next->node : NULL;
@@ -879,9 +890,85 @@ static void gen_map_call(CodeGen *cg, Node *n) {
     if (id == 11) { emit(cg, " = "); gen_conv(cg, mt->elem_type, a2); emit(cg, ")"); }
 }
 
+/* str(value) / str(value, "fmt") */
+static void gen_str_builtin(CodeGen *cg, Node *n) {
+    cg->uses_str = cg->uses_heap = true;
+    Node *v = n->call.args->node;
+    Node *sp = n->call.args->next ? n->call.args->next->node : NULL;
+    TypeInfo *t = v->type;
+    if (!sp && t->kind == TY_STRING) { gen_expr(cg, v); return; }
+    if (!sp && t->kind == TY_BOOL) {
+        emit(cg, "((");
+        gen_expr(cg, v);
+        emit(cg, ") ? \"true\" : \"false\")");
+        return;
+    }
+    const char *spec = sp ? sp->string_lit.value : "";
+    size_t sl = strlen(spec);
+    char letter = sl && isalpha((unsigned char)spec[sl - 1]) ? spec[sl - 1] : 0;
+    const char *body = sl && letter ? tfmt(cg, "%.*s", (int)(sl - 1), spec) : spec;
+    const char *fmt, *cast;
+    if (t->kind == TY_STRING) {
+        fmt = tfmt(cg, "%%%ss", body); cast = "";
+    } else if (t->kind == TY_FLOAT) {
+        char l = letter && strchr("eEfgG", letter) ? letter : (sp ? 'f' : 0);
+        fmt = sp ? tfmt(cg, "%%%s%c", body, l) : "%.15g";
+        cast = "(double)";
+    } else {
+        bool unsig = (t->kind == TY_INT && t->is_unsigned) || (letter && strchr("uxXo", letter));
+        bool is_char = !sp && t->kind == TY_INT && t->cname && !strcmp(t->cname, "char");
+        char l = letter && strchr("dixXou", letter) ? letter : 'd';
+        if (is_char) { fmt = "%c"; cast = "(int)"; }
+        else if (sp && letter == 'c') { fmt = tfmt(cg, "%%%sc", body); cast = "(int)"; }
+        else if (unsig) { fmt = tfmt(cg, "%%%sll%c", body, l == 'd' || l == 'i' ? 'u' : l); cast = "(unsigned long long)"; }
+        else { fmt = tfmt(cg, "%%%slld", body); cast = "(long long)"; }
+    }
+    emitf(cg, "tz_fmt(\"%s\", %s(", fmt, cast);
+    gen_expr(cg, v);
+    emit(cg, "))");
+}
+
+/* string methods */
+static void gen_str_call(CodeGen *cg, Node *n) {
+    cg->uses_str = cg->uses_heap = true;
+    int id = n->mcall.builtin;
+    Node *a1 = n->mcall.args ? n->mcall.args->node : NULL;
+    Node *a2 = n->mcall.args && n->mcall.args->next ? n->mcall.args->next->node : NULL;
+    Node *o = n->mcall.object;
+    if (id == 50) {                                   /* split -> List<string> */
+        int li = list_index(cg, &ty_string);
+        emitf(cg, "({ const char *_s = ");
+        gen_expr(cg, o);
+        emit(cg, "; const char *_sp = ");
+        gen_expr(cg, a1);
+        emitf(cg, "; long long _p = 0; tz_List_%d *_l = tz_List_%d_new(); const char *_t; "
+                  "while ((_t = tz_s_split(_s, _sp, &_p))) tz_List_%d_push(_l, _t, %d); _l; })",
+              li, li, li, n->line);
+        return;
+    }
+    const char *fn = "";
+    switch (id) {
+        case 41: case 42: emitf(cg, "tz_s_case(");  gen_expr(cg, o); emitf(cg, ", %d)", id == 41); return;
+        case 43: fn = "tz_s_trim"; break;      case 44: emit(cg, "(tz_s_find("); gen_expr(cg, o);
+                 emit(cg, ", "); gen_expr(cg, a1); emit(cg, ") >= 0)"); return;
+        case 45: fn = "tz_s_starts"; break;    case 46: fn = "tz_s_ends"; break;
+        case 47: fn = "tz_s_find"; break;      case 48: fn = "tz_s_sub"; break;
+        case 49: fn = "tz_s_replace"; break;   case 51: fn = "tz_s_repeat"; break;
+        case 52: emit(cg, "strtoll("); gen_expr(cg, o); emit(cg, ", NULL, 10)"); return;
+        case 53: emit(cg, "strtod("); gen_expr(cg, o); emit(cg, ", NULL)"); return;
+        default: break;
+    }
+    emitf(cg, "%s(", fn);
+    gen_expr(cg, o);
+    if (a1) { emit(cg, ", "); gen_expr(cg, a1); }
+    if (a2) { emit(cg, ", "); gen_expr(cg, a2); }
+    emit(cg, ")");
+}
+
 static void gen_mcall(CodeGen *cg, Node *n) {
     Method *m = n->mcall.resolved;
     Node *obj = n->mcall.object;
+    if (n->mcall.builtin >= 41) { gen_str_call(cg, n); return; }
     if (n->mcall.builtin >= 11) { gen_map_call(cg, n); return; }
     if (n->mcall.builtin) { gen_list_call(cg, n); return; }
 
@@ -1095,6 +1182,7 @@ static void gen_expr(CodeGen *cg, Node *n) {
         }
 
         case NK_CALL:
+            if (n->call.builtin == 1) { gen_str_builtin(cg, n); break; }
             if (n->call.is_closure) { gen_closure_call(cg, n); break; }
             if (captured_here(cg, n->call.capsym)) emitf(cg, "_e->tz_%s", n->call.name);
             else if (n->call.cname) emit(cg, n->call.cname);     /* C binding: raw name */
@@ -1857,6 +1945,7 @@ void codegen_init(CodeGen *cg, Arena *arena, const char *filename) {
     strbuf_init(&cg->lam_protos);
     cg->nlams = cg->nadapt = 0;
     cg->uses_closure = false;
+    cg->uses_str = false;
     cg->lam = NULL;
     cg->try_depth = cg->break_base = cg->cont_base = 0;
     cg->prog = NULL;
@@ -1874,6 +1963,71 @@ static const char RT_COMMON[] =
     "    memcpy(r + la, b, lb + 1);\n"
     "    return r;\n"
     "}\n\n";
+
+static const char RT_STR[] =
+    "/* --- runtime: strings (str(), $\"..{x}..\", string methods) --- */\n"
+    "#include <stdarg.h>\n#include <ctype.h>\n"
+    "static const char *tz_fmt(const char *f, ...) __attribute__((unused));\n"
+    "static const char *tz_fmt(const char *f, ...) {\n"
+    "    va_list ap, ap2;\n    va_start(ap, f);\n    va_copy(ap2, ap);\n"
+    "    int n = vsnprintf(NULL, 0, f, ap);\n    va_end(ap);\n"
+    "    char *r = (char *)tz_alloc((size_t)(n < 0 ? 0 : n) + 1);\n"
+    "    vsnprintf(r, (size_t)(n < 0 ? 0 : n) + 1, f, ap2);\n    va_end(ap2);\n    return r;\n}\n"
+    "static const char *tz_s_case(const char *s, int up) __attribute__((unused));\n"
+    "static const char *tz_s_case(const char *s, int up) {\n"
+    "    size_t n = strlen(s);\n    char *r = (char *)tz_alloc(n + 1);\n"
+    "    for (size_t i = 0; i < n; i++) r[i] = (char)(up ? toupper((unsigned char)s[i]) : tolower((unsigned char)s[i]));\n"
+    "    r[n] = 0;\n    return r;\n}\n"
+    "static const char *tz_s_trim(const char *s) __attribute__((unused));\n"
+    "static const char *tz_s_trim(const char *s) {\n"
+    "    while (*s && isspace((unsigned char)*s)) s++;\n"
+    "    size_t n = strlen(s);\n    while (n && isspace((unsigned char)s[n - 1])) n--;\n"
+    "    char *r = (char *)tz_alloc(n + 1);\n    memcpy(r, s, n);\n    r[n] = 0;\n    return r;\n}\n"
+    "static long long tz_s_find(const char *s, const char *t) __attribute__((unused));\n"
+    "static long long tz_s_find(const char *s, const char *t) {\n"
+    "    const char *p = strstr(s, t);\n    return p ? (long long)(p - s) : -1;\n}\n"
+    "static int tz_s_starts(const char *s, const char *t) __attribute__((unused));\n"
+    "static int tz_s_starts(const char *s, const char *t) { return strncmp(s, t, strlen(t)) == 0; }\n"
+    "static int tz_s_ends(const char *s, const char *t) __attribute__((unused));\n"
+    "static int tz_s_ends(const char *s, const char *t) {\n"
+    "    size_t a = strlen(s), b = strlen(t);\n    return b <= a && memcmp(s + a - b, t, b) == 0;\n}\n"
+    "static const char *tz_s_sub(const char *s, long long start, long long len) __attribute__((unused));\n"
+    "static const char *tz_s_sub(const char *s, long long start, long long len) {   /* clamps like a slice */\n"
+    "    long long n = (long long)strlen(s);\n"
+    "    if (start < 0) start = 0;\n    if (start > n) start = n;\n"
+    "    if (len < 0) len = 0;\n    if (len > n - start) len = n - start;\n"
+    "    char *r = (char *)tz_alloc((size_t)len + 1);\n    memcpy(r, s + start, (size_t)len);\n    r[len] = 0;\n    return r;\n}\n"
+    "static const char *tz_s_replace(const char *s, const char *a, const char *b) __attribute__((unused));\n"
+    "static const char *tz_s_replace(const char *s, const char *a, const char *b) {\n"
+    "    size_t la = strlen(a), lb = strlen(b), cnt = 0;\n"
+    "    if (!la) return s;\n"
+    "    for (const char *p = s; (p = strstr(p, a)); p += la) cnt++;\n"
+    "    char *r = (char *)tz_alloc(strlen(s) + cnt * (lb > la ? lb - la : 0) + 1), *w = r;\n"
+    "    const char *p = s, *q;\n"
+    "    while ((q = strstr(p, a))) { memcpy(w, p, (size_t)(q - p)); w += q - p; memcpy(w, b, lb); w += lb; p = q + la; }\n"
+    "    strcpy(w, p);\n    return r;\n}\n"
+    "static const char *tz_s_split(const char *s, const char *sep, long long *pos) __attribute__((unused));\n"
+    "static const char *tz_s_split(const char *s, const char *sep, long long *pos) {   /* next piece or NULL */\n"
+    "    if (*pos < 0) return NULL;\n"
+    "    size_t sl = strlen(sep), n;\n    const char *start = s + *pos;\n"
+    "    const char *hit = sl ? strstr(start, sep) : NULL;\n"
+    "    if (hit) { n = (size_t)(hit - start); *pos += (long long)(n + sl); } else { n = strlen(start); *pos = -1; }\n"
+    "    char *r = (char *)tz_alloc(n + 1);\n    memcpy(r, start, n);\n    r[n] = 0;\n    return r;\n}\n"
+    "static const char *tz_s_repeat(const char *s, long long k) __attribute__((unused));\n"
+    "static const char *tz_s_repeat(const char *s, long long k) {\n"
+    "    if (k < 0) k = 0;\n    size_t n = strlen(s);\n"
+    "    char *r = (char *)tz_alloc(n * (size_t)k + 1);\n"
+    "    for (long long i = 0; i < k; i++) memcpy(r + (size_t)i * n, s, n);\n"
+    "    r[n * (size_t)k] = 0;\n    return r;\n}\n"
+    "static const char *tz_s_join(const char **v, long long n, const char *sep) __attribute__((unused));\n"
+    "static const char *tz_s_join(const char **v, long long n, const char *sep) {\n"
+    "    size_t sl = strlen(sep), total = 1;\n"
+    "    for (long long i = 0; i < n; i++) total += strlen(v[i]) + (i ? sl : 0);\n"
+    "    char *r = (char *)tz_alloc(total), *w = r;\n"
+    "    for (long long i = 0; i < n; i++) {\n"
+    "        if (i) { memcpy(w, sep, sl); w += sl; }\n"
+    "        size_t l = strlen(v[i]); memcpy(w, v[i], l); w += l;\n    }\n"
+    "    *w = 0;\n    return r;\n}\n\n";
 
 static const char RT_GROW[] =
     "static void *tz_grow(void *old, size_t oldsz, size_t newsz) __attribute__((unused));\n"
@@ -2176,6 +2330,7 @@ void codegen_generate(CodeGen *cg, Node *prog) {
         strbuf_append(&rt, "\n");
         strbuf_append(&rt, RT_COMMON);
         strbuf_append(&rt, RT_GROW);
+        if (cg->uses_str) strbuf_append(&rt, RT_STR);
     }
     if (cg->lam_defs.len) insert_at(cg, lam_pos, cg->lam_defs.data, "");
     if (cg->lam_protos.len) insert_at(cg, list_pos, cg->lam_protos.data, "");

@@ -6,7 +6,7 @@ N=int(sys.argv[2]) if len(sys.argv)>2 else 1500
 BIN=os.environ.get('BIN') or os.path.join(ROOT,'tamizhi-asan')
 seeds=[open(f,errors='replace').read() for f in glob.glob(ROOT+'/tests/**/*.tz',recursive=True)+glob.glob(ROOT+'/examples/**/*.tz',recursive=True)]
 tok=re.compile(r'\s+|[A-Za-z_][A-Za-z0-9_]*|\d+\.?\d*|"[^"\n]*"|\'[^\'\n]*\'|.',re.S)
-frag=['{','}','(',')',';',':','<','>','[',']','..','.','@','^','*','&','=','==','+=','"unterminated','\'','0x','1e','/*','#','seyal','vagupu','moolam','muyarchi','pidi','ulle','List<','Fn<','Map<','Set<','puthu','thandhai','ithu','nilai','illai','kudu','erivi','serku "x.tzh";','int','string','99999999999999999999','\x00','é','தமிழ்']
+frag=['{','}','(',')',';',':','<','>','[',']','..','.','@','^','*','&','=','==','+=','"unterminated','\'','0x','1e','/*','#','seyal','vagupu','moolam','muyarchi','pidi','ulle','List<','$"{x}"','Fn<','Map<','Set<','puthu','thandhai','ithu','nilai','illai','kudu','erivi','serku "x.tzh";','int','string','99999999999999999999','\x00','é','தமிழ்']
 def mutate(s):
     t=tok.findall(s)
     for _ in range(random.randint(2,8)):

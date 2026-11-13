@@ -1166,6 +1166,40 @@ static TypeInfo *expr(Sema *s, Node *n) {
         case NK_CALL: {
             Symbol *y = lookup_cap(s, n->call.name, &n->call.capsym);
             if (y) y->used = true;
+            if (!y && !strcmp(n->call.name, "str")) {       /* built-in: str(value [, "format"]) */
+                int argc = 0;
+                for (NodeList *a = n->call.args; a; a = a->next) argc++;
+                if (argc < 1 || argc > 2) {
+                    report_error(s->filename, n->line, n->col,
+                                 "str(value) or str(value, \"format\") takes 1 or 2 arguments");
+                    expr_list(s, n->call.args);
+                    return n->type = &ty_string;
+                }
+                TypeInfo *vt = expr(s, n->call.args->node);
+                if (!is_unknown(vt) && vt->kind != TY_INT && vt->kind != TY_FLOAT &&
+                    vt->kind != TY_BOOL && vt->kind != TY_STRING && vt->kind != TY_ENUM)
+                    report_error(s->filename, n->call.args->node->line, n->call.args->node->col,
+                                 "str() converts numbers, bool, enum and string, not %s",
+                                 type_str(s, vt));
+                if (argc == 2) {
+                    Node *f = n->call.args->next->node;
+                    expr(s, f);
+                    if (f->kind != NK_STRING_LIT) {
+                        report_error(s->filename, f->line, f->col,
+                                     "the format of str() must be a string literal such as \".2f\" or \"05d\"");
+                    } else {
+                        const char *sp = f->string_lit.value;
+                        size_t k = 0, len = strlen(sp);
+                        while (k < len && strchr("-+ #0123456789.", sp[k])) k++;
+                        if (k < len - (len ? 1 : 0) || (k < len && !strchr("dioxXuceEfgGs", sp[k])))
+                            report_error(s->filename, f->line, f->col,
+                                         "bad format \"%s\": use flags, width, .precision and one of "
+                                         "d x X o u c f e g s (for example \"08.3f\")", sp);
+                    }
+                }
+                n->call.builtin = 1;
+                return n->type = &ty_string;
+            }
             if (!y) {
                 suggest_symbol(s, n->call.name, true);
                 report_error(s->filename, n->line, n->col,
@@ -1466,6 +1500,21 @@ static TypeInfo *mcall_expr(Sema *s, Node *n) {
     if (is_unknown(ot)) { expr_list(s, n->mcall.args); return &ty_unknown; }
 
     if (ot->kind == TY_LIST) {
+        if (!strcmp(mname, "join") && !is_unknown(ot->elem_type) && ot->elem_type->kind == TY_STRING) {
+            int argc = 0;
+            for (NodeList *a = n->mcall.args; a; a = a->next) argc++;
+            if (argc != 1) {
+                report_error(s->filename, n->line, n->col, "List.join takes 1 argument (the separator)");
+                expr_list(s, n->mcall.args);
+                return &ty_string;
+            }
+            TypeInfo *at = expr(s, n->mcall.args->node);
+            if (!assignable(s, &ty_string, at, n->mcall.args->node))
+                report_error(s->filename, n->mcall.args->node->line, n->mcall.args->node->col,
+                             "the separator must be a string, not %s", type_str(s, at));
+            n->mcall.builtin = 8;
+            return &ty_string;
+        }
         static const struct { const char *name; int argc; int id; } LM[] = {
             { "push", 1, 1 }, { "pop", 0, 2 }, { "get", 1, 3 }, { "set", 2, 4 },
             { "insert", 2, 5 }, { "remove", 1, 6 }, { "clear", 0, 7 },
@@ -1476,7 +1525,7 @@ static TypeInfo *mcall_expr(Sema *s, Node *n) {
         if (k < 0) {
             report_error(s->filename, n->line, n->col,
                          "List has no method '%s' (push pop get set insert remove clear, "
-                         "and .length)", mname);
+                         "join for List<string>, and .length)", mname);
             expr_list(s, n->mcall.args);
             return &ty_unknown;
         }
@@ -1509,6 +1558,55 @@ static TypeInfo *mcall_expr(Sema *s, Node *n) {
         }
         n->mcall.builtin = id;
         return (id == 2 || id == 3 || id == 6) ? ot->elem_type : &ty_void;
+    }
+
+    if (ot->kind == TY_STRING) {
+        static const struct { const char *name; int argc; int id; const char *args; } SM[] = {
+            { "upper", 0, 41, "" },   { "lower", 0, 42, "" },   { "trim", 0, 43, "" },
+            { "contains", 1, 44, "s" }, { "starts", 1, 45, "s" }, { "ends", 1, 46, "s" },
+            { "find", 1, 47, "s" },   { "sub", 2, 48, "ii" },   { "replace", 2, 49, "ss" },
+            { "split", 1, 50, "s" },  { "repeat", 1, 51, "i" }, { "to_int", 0, 52, "" },
+            { "to_float", 0, 53, "" },
+        };
+        int k = -1;
+        for (size_t i = 0; i < sizeof SM / sizeof SM[0]; i++)
+            if (!strcmp(SM[i].name, mname)) k = (int)i;
+        if (k < 0) {
+            report_error(s->filename, n->line, n->col,
+                         "string has no method '%s' (upper lower trim contains starts ends find sub "
+                         "replace split repeat to_int to_float, and .length)", mname);
+            expr_list(s, n->mcall.args);
+            return &ty_unknown;
+        }
+        int argc = 0;
+        for (NodeList *a = n->mcall.args; a; a = a->next) argc++;
+        if (argc != SM[k].argc) {
+            report_error(s->filename, n->line, n->col, "string.%s takes %d argument(s), not %d",
+                         mname, SM[k].argc, argc);
+            expr_list(s, n->mcall.args);
+            return &ty_unknown;
+        }
+        int ai = 0;
+        for (NodeList *a = n->mcall.args; a; a = a->next, ai++) {
+            TypeInfo *at = expr(s, a->node);
+            TypeInfo *want = SM[k].args[ai] == 's' ? &ty_string : &ty_int;
+            if (!assignable(s, want, at, a->node))
+                report_error(s->filename, a->node->line, a->node->col,
+                             "argument %d of string.%s: expected %s but got %s", ai + 1, mname,
+                             type_str(s, want), type_str(s, at));
+        }
+        n->mcall.builtin = SM[k].id;
+        switch (SM[k].id) {
+            case 44: case 45: case 46: return &ty_bool;
+            case 47: case 52: return &ty_int;
+            case 53: return &ty_float;
+            case 50: {
+                TypeInfo *lt = type_new(s->arena, TY_LIST);
+                lt->elem_type = &ty_string;
+                return lt;
+            }
+            default: return &ty_string;
+        }
     }
 
     if (ot->kind == TY_MAP) {

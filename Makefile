@@ -73,6 +73,7 @@ test: $(TARGET)
 	run "abstract classes" tests/v21/abstract.expected $(BIN) tests/v21/abstract.tz --no-gc -o $$tmp/out; \
 	run "lambdas" tests/v21/lambda.expected $(BIN) tests/v21/lambda.tz --no-gc -o $$tmp/out; \
 	run "standard library" tests/v21/stdlib.expected $(BIN) tests/v21/stdlib.tz --no-gc -o $$tmp/out; \
+	run "strings" tests/v21/strings.expected $(BIN) tests/v21/strings.tz --no-gc -o $$tmp/out; \
 	run "closures" tests/v21/closure.expected $(BIN) tests/v21/closure.tz --no-gc -o $$tmp/out; \
 	run "Map and Set" tests/v21/map.expected $(BIN) tests/v21/map.tz --no-gc -o $$tmp/out; \
 	printf "  %-24s" "deep nesting rejected"; \

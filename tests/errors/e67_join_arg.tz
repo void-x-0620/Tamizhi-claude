@@ -1,0 +1,1 @@
+seyal main(): int { edu xs = "a,b".split(","); edu s = xs.join(5); kudu 0; }

@@ -1359,6 +1359,85 @@ static Node *parse_postfix(Parser *p) {
     }
 }
 
+/* $"text {expr} more {expr:.2f}"  ==>  "text " + str(expr) + " more " + str(expr, ".2f") */
+static Node *str_lit_node(Parser *p, Token tok, const char *text, size_t n) {
+    char *buf = arena_alloc(p->arena, n + 1);
+    memcpy(buf, text, n);
+    buf[n] = 0;
+    Node *l = node_new(p->arena, NK_STRING_LIT, tok.line, tok.col);
+    l->string_lit.value = buf;
+    return l;
+}
+
+static Node *parse_interpolated(Parser *p, Token tok) {
+    const char *v = tok.val.str_val;
+    Node *acc = NULL;
+    size_t lit_start = 0;
+    char *lit = arena_alloc(p->arena, strlen(v) + 1);
+    size_t ln = 0;
+    #define APPEND(part) do { Node *_n = (part); \
+        if (!acc) acc = _n; else { Node *b = node_new(p->arena, NK_BINARY, tok.line, tok.col); \
+            b->binary.op = BOP_ADD; b->binary.left = acc; b->binary.right = _n; acc = b; } } while (0)
+    (void)lit_start;
+    for (size_t i = 0; v[i];) {
+        if (v[i] == '{' && v[i + 1] == '{') { lit[ln++] = '{'; i += 2; continue; }
+        if (v[i] == '}' && v[i + 1] == '}') { lit[ln++] = '}'; i += 2; continue; }
+        if (v[i] != '{') { lit[ln++] = v[i++]; continue; }
+        size_t j = i + 1;
+        int depth = 1;
+        bool in_str = false;
+        while (v[j] && depth) {
+            if (v[j] == '"') in_str = !in_str;
+            else if (!in_str && v[j] == '{') depth++;
+            else if (!in_str && v[j] == '}') depth--;
+            if (depth) j++;
+        }
+        if (!v[j]) {
+            report_error(p->lexer->filename, tok.line, tok.col,
+                         "unclosed '{' in the interpolated string (write {{ for a literal brace)");
+            return str_lit_node(p, tok, "", 0);
+        }
+        if (ln) { APPEND(str_lit_node(p, tok, lit, ln)); ln = 0; }
+        size_t elen = j - (i + 1);
+        char *etext = arena_alloc(p->arena, elen + 1);
+        memcpy(etext, v + i + 1, elen);
+        etext[elen] = 0;
+        /* optional ":format" after the last top-level colon (not part of ?: or a string) */
+        const char *spec = NULL;
+        if (!strchr(etext, '?')) {
+            char *c = strrchr(etext, ':');
+            if (c && !strchr(c, '"') && !strchr(c, '(')) { *c = 0; spec = c + 1; }
+        }
+        Lexer sub;
+        lexer_init(&sub, etext, p->lexer->filename, p->arena);
+        sub.line = tok.line;
+        sub.col = tok.col + 2 + (int)i;
+        Parser sp;
+        parser_init(&sp, &sub, p->arena);
+        sp.func_depth = p->func_depth;
+        Node *e = parse_expr(&sp);
+        if (lexer_peek(&sub).type != TOK_EOF)
+            report_error(p->lexer->filename, tok.line, tok.col + 2 + (int)i,
+                         "unexpected text in the interpolation {%s}", etext);
+        Node *call = node_new(p->arena, NK_CALL, e->line, e->col);
+        call->call.name = "str";
+        NodeList *a1 = arena_alloc(p->arena, sizeof *a1);
+        a1->node = e; a1->next = NULL;
+        call->call.args = a1;
+        if (spec) {
+            NodeList *a2 = arena_alloc(p->arena, sizeof *a2);
+            a2->node = str_lit_node(p, tok, spec, strlen(spec));
+            a2->next = NULL;
+            a1->next = a2;
+        }
+        APPEND(call);
+        i = j + 1;
+    }
+    if (ln || !acc) APPEND(str_lit_node(p, tok, lit, ln));
+    #undef APPEND
+    return acc;
+}
+
 static Node *parse_primary(Parser *p) {
     Token tok = peek(p);
     switch (tok.type) {
@@ -1410,6 +1489,9 @@ static Node *parse_primary(Parser *p) {
             n->float_lit.value = tok.val.float_val;
             return n;
         }
+        case TOK_ISTRING_LIT:
+            advance(p);
+            return parse_interpolated(p, tok);
         case TOK_STRING_LIT: {
             advance(p);
             Node *n = node_new(p->arena, NK_STRING_LIT, tok.line, tok.col);

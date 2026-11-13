@@ -49,7 +49,7 @@ typedef struct {
     const char *list_keys[256];
     StrBuf      lam_defs, lam_protos;   /* lambda bodies / their prototypes    */
     int         nlams, nadapt;
-    bool        uses_closure;           /* Fn<...> values need tz_Fn           */
+    bool        uses_closure, uses_str;   /* tz_Fn / string runtime needed */           /* Fn<...> values need tz_Fn           */
     struct LamFrame *lam;               /* lambda whose body is being emitted  */
     const char *adapt_keys[64];
     Node       *prog;        /* the program being generated                    */

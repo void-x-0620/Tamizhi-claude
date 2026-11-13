@@ -1,0 +1,34 @@
+# string interpolation, str(), string methods
+pattiyal Mood { Calm, Happy }
+seyal main(): int {
+    edu name = "Sibi";
+    edu age = 30;
+    edu pi = 3.14159;
+    pathi("%s\n", $"Hello {name}, you are {age} years old");
+    pathi("%s\n", $"pi is about {pi:.2f} or {pi:8.3f}|");
+    pathi("%s\n", $"hex {255:x} padded {7:03d} next {age + 1} {{literal}}");
+    pathi("%s\n", $"{name}");
+    pathi("%s %s %s\n", str(42), str(2.5), str(true));
+    pathi("%s\n", str(Mood.Happy));
+    edu c: char = 'z';
+    pathi("%s\n", $"char {c} and a {\"quoted\"} string");
+
+    edu s = "  Hello, World  ";
+    edu t = s.trim();
+    pathi("[%s] [%s] [%s]\n", t, t.upper(), t.lower());
+    pathi("%d %d %d\n", t.contains("World"), t.starts("Hello"), t.ends("x"));
+    pathi("%d %d\n", t.find("World"), t.find("zzz"));
+    pathi("%s|%s|%s\n", t.sub(7, 5), t.sub(100, 3), t.replace("l", "L"));
+    pathi("%s\n", "ab".repeat(3));
+    edu parts = "red,green,,blue".split(",");
+    pathi("%d %s %s\n", parts.length, parts[1], parts[2]);
+    pathi("%s\n", parts.join(" + "));
+    pathi("%d %f\n", "123".to_int() + 1, "2.5".to_float() * 2.0);
+    edu total = 0;
+    ovvoru (edu p ulle "1;2;3".split(";")) { total += p.to_int(); }
+    pathi("%d\n", total);
+    edu line = "";
+    ovvoru (edu i ulle 0 .. 3) { line += $"[{i}]"; }
+    pathi("%s\n", line);
+    kudu 0;
+}
