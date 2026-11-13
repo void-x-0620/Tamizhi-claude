@@ -1,0 +1,13 @@
+# nool/json.tzb — Tamizhi standard library: JSON handled as text.
+# A path looks like  users[0].name  (keys separated by '.', array indexes in [ ]).
+veli "tz_std.h";
+veli seyal json_valid  = tz_json_valid(s : string) : int;
+veli seyal json_type   = tz_json_type(s : string, path : string) : string;   # string number bool null object array, "" if absent
+veli seyal json_get    = tz_json_get(s : string, path : string) : string;    # strings decoded; objects/arrays as JSON text; "" if absent
+veli seyal json_has    = tz_json_has(s : string, path : string) : int;
+veli seyal json_len    = tz_json_len(s : string, path : string) : int;       # elements / members, -1 if not a container
+veli seyal json_keys   = tz_json_keys(s : string, path : string) : string;   # object keys, one per line
+veli seyal json_escape = tz_json_escape(s : string) : string;
+veli seyal json_quote  = tz_json_quote(s : string) : string;                 # "text" with escapes
+veli seyal json_pretty = tz_json_pretty(s : string) : string;
+veli seyal json_minify = tz_json_minify(s : string) : string;

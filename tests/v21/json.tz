@@ -1,0 +1,16 @@
+serku "nool/all.tzh";
+seyal main(): int {
+    edu j = "{\"name\": \"Tamizhi\", \"v\": 2.8, \"tags\": [\"a\", \"b\\n\", {\"k\": true}], \"o\": {\"x\": null}}";
+    pathi("%d %d\n", json_valid(j), json_valid("{\"a\": }"));
+    pathi("%s|%s|%s\n", json_get(j, "name"), json_get(j, "v"), json_get(j, "tags[1]"));
+    pathi("%s %s %s %s\n", json_type(j, "tags"), json_type(j, "tags[2].k"), json_type(j, "o.x"), json_type(j, "zzz"));
+    pathi("%d %d %d\n", json_len(j, "tags"), json_len(j, "o"), json_len(j, "name"));
+    pathi("%s|%d\n", json_keys(j, ""), json_has(j, "o.x"));
+    pathi("%s\n", json_get(j, "tags[2]"));
+    pathi("%s\n", json_quote("say \"hi\"\n"));
+    pathi("%s\n", json_minify("{ \"a\" : [1, 2] , \"b\" : { } }"));
+    pathi("%s\n", json_pretty("{\"a\":[1,2],\"b\":{}}"));
+    pathi("%d\n", str_to_int_ok(json_get("{\"n\": 42}", "n")));
+    kudu 0;
+}
+seyal str_to_int_ok(s: string): int { kudu parse_int(s) + 1; }

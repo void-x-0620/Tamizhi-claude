@@ -1,0 +1,20 @@
+1 0
+Tamizhi|2.8|b
+
+array bool null 
+3 1 -1
+name
+v
+tags
+o|1
+{"k": true}
+"say \"hi\"\n"
+{"a":[1,2],"b":{}}
+{
+  "a": [
+    1,
+    2
+  ],
+  "b": {}
+}
+43

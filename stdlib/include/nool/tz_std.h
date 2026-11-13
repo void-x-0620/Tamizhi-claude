@@ -142,6 +142,17 @@ const char *tz_url_decode(const char *s);
 long long tz_regex_match(const char *pattern, const char *s);
 const char *tz_regex_find(const char *pattern, const char *s);
 const char *tz_regex_replace(const char *pattern, const char *s, const char *repl);
+/* ---- json (as text) ---- */
+long long tz_json_valid(const char *s);
+const char *tz_json_type(const char *s, const char *path);
+const char *tz_json_get(const char *s, const char *path);
+long long tz_json_has(const char *s, const char *path);
+long long tz_json_len(const char *s, const char *path);
+const char *tz_json_keys(const char *s, const char *path);
+const char *tz_json_escape(const char *s);
+const char *tz_json_quote(const char *s);
+const char *tz_json_pretty(const char *s);
+const char *tz_json_minify(const char *s);
 
 #ifdef __cplusplus
 }
