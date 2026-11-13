@@ -358,6 +358,10 @@ irudhi { ... }                 # finally: always runs
 - An uncaught object prints `file:line: uncaught exception: ClassName`.
 - A `muyarchi` needs at least one `pidi` or an `irudhi`.
 
+Any expression holding an `Fn` can be called directly: `add(3)(4)`,
+`fs.get(1)(5)`, `m.get("k")(1)`. Calling something that is not a function is an
+error ("cannot be called").
+
 ## 14. Not supported (on purpose or yet)
 
 `goto`, bit-fields, the comma operator, inline assembly, interfaces, user generics, `finally`, constructor/method overloading, multiple inheritance, generics,

@@ -1352,10 +1352,10 @@ static Node *parse_postfix(Parser *p) {
                 n->mcall.args = args;
                 node = n;
             } else {
-                if (node->kind != NK_IDENT)
-                    syntax_error(p, lp, "only named functions and methods can be called");
+                (void)lp;
                 Node *n = node_new(p->arena, NK_CALL, node->line, node->col);
                 n->call.name = node->kind == NK_IDENT ? node->ident.name : "?";
+                if (node->kind != NK_IDENT) n->call.callee = node;     /* f(1)(2), fs.get(0)(3) */
                 n->call.args = args;
                 node = n;
             }

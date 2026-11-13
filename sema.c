@@ -1164,6 +1164,20 @@ static TypeInfo *expr(Sema *s, Node *n) {
         }
 
         case NK_CALL: {
+            if (n->call.callee) {                           /* call of an expression's value */
+                TypeInfo *ct = expr(s, n->call.callee);
+                if (is_unknown(ct)) { expr_list(s, n->call.args); return n->type = &ty_unknown; }
+                if (ct->kind != TY_CLOSURE && ct->kind != TY_FUNC) {
+                    report_error(s->filename, n->line, n->col,
+                                 "this expression has type %s and cannot be called", type_str(s, ct));
+                    expr_list(s, n->call.args);
+                    return n->type = &ty_unknown;
+                }
+                n->call.is_closure = ct->kind == TY_CLOSURE;
+                check_args(s, ct->fparams, n->call.args, "function value", n->line, n->col);
+                n->call.params = ct->fparams;
+                return n->type = ct->fret;
+            }
             Symbol *y = lookup_cap(s, n->call.name, &n->call.capsym);
             if (y) y->used = true;
             if (!y && !strcmp(n->call.name, "str")) {       /* built-in: str(value [, "format"]) */

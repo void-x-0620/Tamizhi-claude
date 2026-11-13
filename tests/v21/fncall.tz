@@ -1,0 +1,13 @@
+seyal add(a: int): Fn<(int): int> {
+    kudu seyal(b: int): int { kudu a + b; };
+}
+seyal main(): int {
+    pathi("%d\n", add(3)(4));
+    edu fs = puthu List<Fn<(int): int>>(add(1), add(10));
+    pathi("%d\n", fs.get(1)(5));
+    edu m = puthu Map<string, Fn<(int): int>>();
+    m.put("k", add(100));
+    pathi("%d\n", m.get("k")(1));
+    pathi("%d\n", fs.get(0)(1) + fs.get(1)(1));
+    kudu 0;
+}

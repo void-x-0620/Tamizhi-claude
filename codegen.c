@@ -744,7 +744,8 @@ static void gen_closure_call(CodeGen *cg, Node *n) {
         ps = tfmt(cg, "%s, %s", ps, decl_str(cg, p->type, ""));
     const char *fty = decl_str(cg, n->type, tfmt(cg, "(*)(%s)", ps));
     emit(cg, "({ tz_Fn _f = ");
-    if (captured_here(cg, n->call.capsym)) emitf(cg, "_e->tz_%s", n->call.name);
+    if (n->call.callee) gen_expr(cg, n->call.callee);
+    else if (captured_here(cg, n->call.capsym)) emitf(cg, "_e->tz_%s", n->call.name);
     else emit_ident(cg, n->call.name);
     emit(cg, "; ");
     if (cg->checks) {
@@ -1184,6 +1185,14 @@ static void gen_expr(CodeGen *cg, Node *n) {
         case NK_CALL:
             if (n->call.builtin == 1) { gen_str_builtin(cg, n); break; }
             if (n->call.is_closure) { gen_closure_call(cg, n); break; }
+            if (n->call.callee) {
+                emit(cg, "(");
+                gen_expr(cg, n->call.callee);
+                emit(cg, ")(");
+                gen_args(cg, n->call.params, n->call.args, false);
+                emit(cg, ")");
+                break;
+            }
             if (captured_here(cg, n->call.capsym)) emitf(cg, "_e->tz_%s", n->call.name);
             else if (n->call.cname) emit(cg, n->call.cname);     /* C binding: raw name */
             else               emit_ident(cg, n->call.name);

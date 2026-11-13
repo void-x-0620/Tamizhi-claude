@@ -193,7 +193,7 @@ struct Node {
         struct { const char *name; NodeList *args;
                  const char *cname;             /* set for C bindings */
                  struct Param *params;
-                 void *capsym; bool is_closure; int builtin; } call;  /* callee's parameters (sema) */
+                 void *capsym; bool is_closure; int builtin; Node *callee; } call;  /* callee's parameters (sema) */
         struct { Node *array; Node *index; } index;
         struct { Node *fn; Capture *caps; int ncap; int id; } lambda;   /* seyal (...) { } expression */
         struct { Node *object; const char *field;
