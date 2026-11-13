@@ -1,0 +1,30 @@
+serku "nool/all.tzh";
+seyal main(): int {
+    pathi("%s|%s|%d|%d\n", str_pad_left("7", 3, "0"), str_reverse("abc"), char_at("A", 0), str_count("banana", "an"));
+    pathi("%s %s %d\n", to_hex(255), to_bin(5), parse_int_base("ff", 16));
+    pathi("%d %d %d %d %d\n", gcd(12, 18), lcm(4, 6), ipow(2, 10), factorial(5), is_prime(97));
+    pathi("%d %d %.3f %.3f\n", clamp(15, 0, 10), sign(-9), atan2(1.0, 1.0) * 4.0, hypot(3.0, 4.0));
+    pathi("%s\n", sha256("abc"));
+    pathi("%s %s %d\n", base64_encode("Tamizhi!"), base64_decode("VGFtaXpoaSE="), crc32("123456789"));
+    pathi("%s %s %s\n", hex_encode("Hi"), url_encode("a b&c"), url_decode("a%20b+c"));
+    pathi("%d %d %s|%s\n", regex_match("^[a-z]+[0-9]+$", "abc123"), regex_match("^[0-9]+$", "x"),
+          regex_find("[0-9]+", "ab123cd45"), regex_replace("[0-9]+", "a1b22c", "#"));
+    edu d = path_join(temp_dir(), "tz_stdlib_test");
+    make_dir(d);
+    write_file(path_join(d, "b.txt"), "hello");
+    write_file(path_join(d, "a.txt"), "x");
+    pathi("%s|%d|%d|%d\n", list_dir(d), file_size(path_join(d, "b.txt")), is_dir(d), is_file(d));
+    pathi("%s %s %s\n", path_base("/a/b/c.tar.gz"), path_dir("/a/b/c.txt"), path_ext("x/c.txt"));
+    remove_file(path_join(d, "a.txt")); remove_file(path_join(d, "b.txt")); remove_dir(d);
+    pathi("%d\n", is_dir(d));
+    pathi("%s|%d\n", capture_command("echo hi"), run_command("exit 3"));
+    pathi("%s %d\n", format_time(86400 * 400, "%Y"), weekday(86400 * 3 + 43200));
+    edu xs = puthu List<int>(5, 2, 9, 1);
+    sort_int(xs);
+    pathi("%d %d %d %d | %d %d %d\n", xs.get(0), xs.get(1), xs.get(2), xs.get(3), sum_int(xs), max_int(xs), index_of_int(xs, 9));
+    reverse_int(xs);
+    edu ss = puthu List<string>("pear", "apple", "fig");
+    sort_str(ss);
+    pathi("%d %s %s %s %d\n", xs.get(0), ss.get(0), ss.get(1), ss.get(2), range_list(2, 6).length);
+    kudu 0;
+}

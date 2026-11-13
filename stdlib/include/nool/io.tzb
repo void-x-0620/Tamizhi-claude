@@ -1,0 +1,13 @@
+# nool/io.tzb — Tamizhi standard library: console and file input/output
+veli "tz_std.h";
+veli seyal read_line  = tz_read_line() : string;
+veli seyal read_int   = tz_read_int() : int;
+veli seyal read_float = tz_read_float() : float;
+veli seyal read_file  = tz_read_file(path : string) : string;       # illai if it cannot be opened
+veli seyal write_file = tz_write_file(path : string, text : string) : int;   # 1 = ok
+veli seyal append_file = tz_append_file(path : string, text : string) : int;
+veli seyal file_exists = tz_file_exists(path : string) : int;
+veli seyal read_all   = tz_read_all() : string;                      # all of standard input
+veli seyal print_str  = tz_print_str(s : string);                    # print text without a format
+veli seyal eprint     = tz_eprint(s : string);                       # print to standard error
+veli seyal remove_file = tz_remove_file(path : string) : int;

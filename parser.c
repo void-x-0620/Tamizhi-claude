@@ -281,6 +281,9 @@ static Node *parse_import(Parser *p) {
     char cand[PATH_MAX];
     char *src = open_relative(p, path.val.str_val, cand, sizeof cand);
     if (!src) {
+        if (!strncmp(path.val.str_val, "nool/", 5))
+            diag_hint("the standard library is not installed: run 'make install' "
+                      "(per user: ~/.local/share/{include,lib}/tamizhi) or set TAMIZHI_INCLUDE");
         report_error(file, kw.line, kw.col, "cannot open '%s': %s",
                      path.val.str_val, strerror(errno));
         return NULL;

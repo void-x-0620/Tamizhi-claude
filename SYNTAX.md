@@ -241,12 +241,33 @@ edu f = seyal(x: int, y: int): int { kudu x + y; };
 A lambda that uses no local variables is a plain function value (`seyal(int,int): int`). One that does becomes a **closure** (section 11).
 
 ### Standard library
-`serku "nool/all.tzh";` imports all of: `io` (read_line, read_int, read_float, read_file, write_file, append_file, file_exists),
-`string` (str_len, str_sub, str_find, str_upper, str_lower, str_trim, str_starts, str_ends, str_replace, str_repeat, chr,
-int_to_str, float_to_str, parse_int, parse_float), `math` (sqrt pow sin cos tan log exp floor ceil round fabs abs min max pi),
-`os` (arg_count, arg_get, exit_program, env_get), `time` (clock_ms, time_now, sleep_ms, rand_seed, rand_int, rand_float).
-Import one with e.g. `serku "nool/math.tzb";`. Library lookup: `$TAMIZHI_LIB`, `<exe>/lib`, `<exe>/../lib/tamizhi`, `/usr/local/lib/tamizhi`.
-Library strings are malloc'd and never freed.
+The library has two halves, laid out like a C library: **declarations** in `<prefix>/include/tamizhi/nool/`
+(`.tzb` bindings, `.tzh` modules written in Tamizhi, and `tz_std.h`) and the **compiled code** in
+`<prefix>/lib/tamizhi/libtamizhi.a`, which the compiler links automatically.
+
+| prefix | include | lib |
+|---|---|---|
+| `~/.local/share` (current default, `make install`) | `~/.local/share/include/tamizhi` | `~/.local/share/lib/tamizhi` |
+| `/usr` (system: `sudo make install PREFIX=/usr`) | `/usr/include/tamizhi` | `/usr/lib/tamizhi` |
+
+Search order: `$TAMIZHI_INCLUDE` / `$TAMIZHI_LIB`, `stdlib/` next to the compiler (source tree), `~/.local/share`,
+`/usr/local`, `/usr`. `make uninstall` removes it.
+
+`serku "nool/all.tzh";` imports everything; import one module with e.g. `serku "nool/math.tzb";`.
+Strings returned by the library are malloc'd and never freed.
+
+| module | functions |
+|---|---|
+| `io` | read_line read_int read_float read_all read_file write_file append_file file_exists remove_file print_str eprint |
+| `string` | str_len str_sub str_find str_upper str_lower str_trim str_starts str_ends str_replace str_repeat str_reverse str_count str_pad_left str_pad_right str_cmp str_capitalize str_is_digits str_is_alpha char_at ord chr int_to_str float_to_str parse_int parse_float parse_int_base to_hex to_bin |
+| `math` | sqrt pow sin cos tan asin acos atan atan2 sinh cosh tanh log log10 log2 exp floor ceil round trunc fabs fmod cbrt hypot abs min max minf maxf clamp clampf sign gcd lcm ipow factorial is_prime is_nan deg_to_rad rad_to_deg pi euler inf |
+| `os` | arg_count arg_get exit_program env_get |
+| `time` | clock_ms time_now sleep_ms rand_seed rand_seed_now rand_int rand_float format_time now_iso year month day hour minute second weekday |
+| `fs` | file_size is_file is_dir rename_file copy_file make_dir remove_dir list_dir current_dir change_dir home_dir temp_dir path_join path_base path_dir path_ext |
+| `process` | run_command capture_command get_pid hostname |
+| `encoding` | hash_djb2 hash_fnv1a crc32 sha256 base64_encode/decode hex_encode/decode url_encode/decode |
+| `regex` | regex_match regex_find regex_replace (POSIX extended) |
+| `listutil` (written in Tamizhi) | sum_int sum_float max_int min_int index_of_int index_of_str contains_int reverse_int sort_int sort_float sort_str range_list |
 
 ## 9. Version 2.2: diagnostics and range loops
 

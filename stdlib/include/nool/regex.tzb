@@ -1,0 +1,5 @@
+# nool/regex.tzb — Tamizhi standard library: POSIX extended regular expressions
+veli "tz_std.h";
+veli seyal regex_match   = tz_regex_match(pattern : string, s : string) : int;   # 1 match, 0 none, -1 bad pattern
+veli seyal regex_find    = tz_regex_find(pattern : string, s : string) : string; # first match or ""
+veli seyal regex_replace = tz_regex_replace(pattern : string, s : string, repl : string) : string;  # every match

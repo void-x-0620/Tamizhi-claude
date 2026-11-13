@@ -1,0 +1,18 @@
+# nool/fs.tzb — Tamizhi standard library: files, directories and paths
+veli "tz_std.h";
+veli seyal file_size   = tz_file_size(path : string) : int;          # -1 if missing
+veli seyal is_dir      = tz_is_dir(path : string) : int;
+veli seyal is_file     = tz_is_file(path : string) : int;
+veli seyal rename_file = tz_rename_file(from : string, to : string) : int;
+veli seyal copy_file   = tz_copy_file(from : string, to : string) : int;
+veli seyal make_dir    = tz_make_dir(path : string) : int;
+veli seyal remove_dir  = tz_remove_dir(path : string) : int;
+veli seyal list_dir    = tz_list_dir(path : string) : string;        # names joined by "\n"; illai if unreadable
+veli seyal current_dir = tz_current_dir() : string;
+veli seyal change_dir  = tz_change_dir(path : string) : int;
+veli seyal home_dir    = tz_home_dir() : string;
+veli seyal temp_dir    = tz_temp_dir() : string;
+veli seyal path_join   = tz_path_join(a : string, b : string) : string;
+veli seyal path_base   = tz_path_base(path : string) : string;
+veli seyal path_dir    = tz_path_dir(path : string) : string;
+veli seyal path_ext    = tz_path_ext(path : string) : string;

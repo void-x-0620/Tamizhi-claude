@@ -1,0 +1,12 @@
+# nool/encoding.tzb — Tamizhi standard library: hashes and text encodings
+veli "tz_std.h";
+veli seyal hash_djb2   = tz_hash_djb2(s : string) : int;
+veli seyal hash_fnv1a  = tz_hash_fnv1a(s : string) : int;
+veli seyal crc32       = tz_crc32(s : string) : int;
+veli seyal sha256      = tz_sha256(s : string) : string;             # 64 hex digits
+veli seyal base64_encode = tz_base64_encode(s : string) : string;
+veli seyal base64_decode = tz_base64_decode(s : string) : string;
+veli seyal hex_encode  = tz_hex_encode(s : string) : string;
+veli seyal hex_decode  = tz_hex_decode(s : string) : string;
+veli seyal url_encode  = tz_url_encode(s : string) : string;
+veli seyal url_decode  = tz_url_decode(s : string) : string;

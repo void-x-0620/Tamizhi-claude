@@ -44,6 +44,7 @@ typedef struct {
     StrList     libdir;      /* -L<dir>                         */
     StrList     lib;         /* -l<name>                        */
     StrList     extra;       /* extra .c/.o/.a files to link    */
+    const char *stdlib_a;    /* libtamizhi.a, if installed      */
     bool        gc;          /* --gc (default) / --no-gc        */
     bool        checks;      /* runtime checks (default) / --no-checks */
     bool        lines, debug; /* #line directives / pass -g to the C compiler */
@@ -67,6 +68,8 @@ static void usage(const char *prog) {
         "  -O<0-3>          optimisation level for the host compiler (default 2)\n"
         "  -v               print per-stage timings\n"
         "  -I<dir>          header search directory for C bindings\n"
+        "  standard library: include/tamizhi + lib/tamizhi under ~/.local/share, /usr/local or /usr\n"
+        "                   (override: $TAMIZHI_INCLUDE; install with 'make install')\n"
         "  -L<dir>          library search directory\n"
         "  -l<name>         link a C library (e.g. -lm, -lsqlite3)\n"
         "  file.c|.o|.a     extra C code to compile and link in\n"
@@ -194,6 +197,49 @@ static void dump_tokens(const char *src, const char *file, Arena *arena) {
     }
 }
 
+/* Standard library layout (mirrors /usr):
+ *     <prefix>/include/tamizhi/nool/{.tzb,.tzh,tz_std.h}    declarations ("serku")
+ *     <prefix>/lib/tamizhi/libtamizhi.a                     compiled functions
+ * Searched in order: $TAMIZHI_INCLUDE / $TAMIZHI_LIB, the source tree next to the
+ * compiler (stdlib/), ~/.local/share (the per-user prefix), /usr/local, /usr. */
+static const char *first_with(Arena *arena, const char *file, const char *const *dirs, int n,
+                              bool want_dir) {
+    for (int i = 0; i < n; i++) {
+        if (!dirs[i] || !*dirs[i]) continue;
+        char buf[4400];
+        snprintf(buf, sizeof buf, "%s/%s", dirs[i], file);
+        if (access(buf, R_OK) == 0) return want_dir ? dirs[i] : arena_strdup(arena, buf);
+    }
+    return NULL;
+}
+
+static void stdlib_locate(Arena *arena, Config *cfg) {
+    char exe[4096] = "", home_inc[4200] = "", home_lib[4200] = "";
+    char dev_inc[4200] = "", dev_lib[4200] = "", up_inc[4200] = "", up_lib[4200] = "";
+    const char *home = getenv("HOME");
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (n > 0) {
+        exe[n] = '\0';
+        char *slash = strrchr(exe, '/');
+        if (slash) *slash = '\0';
+        snprintf(dev_inc, sizeof dev_inc, "%s/stdlib/include", exe);
+        snprintf(dev_lib, sizeof dev_lib, "%s/stdlib/lib", exe);
+        snprintf(up_inc, sizeof up_inc, "%s/../include/tamizhi", exe);
+        snprintf(up_lib, sizeof up_lib, "%s/../lib/tamizhi", exe);
+    }
+    if (home && *home) {
+        snprintf(home_inc, sizeof home_inc, "%s/.local/share/include/tamizhi", home);
+        snprintf(home_lib, sizeof home_lib, "%s/.local/share/lib/tamizhi", home);
+    }
+    const char *incs[] = { getenv("TAMIZHI_INCLUDE"), getenv("TAMIZHI_LIB"), dev_inc, up_inc,
+                           home_inc, "/usr/local/include/tamizhi", "/usr/include/tamizhi" };
+    const char *libs[] = { getenv("TAMIZHI_LIB"), dev_lib, up_lib, home_lib,
+                           "/usr/local/lib/tamizhi", "/usr/lib/tamizhi" };
+    for (size_t i = 0; i < sizeof incs / sizeof *incs; i++)
+        if (incs[i] && *incs[i]) parser_add_lib_dir(arena_strdup(arena, incs[i]));
+    cfg->stdlib_a = first_with(arena, "libtamizhi.a", libs, (int)(sizeof libs / sizeof *libs), false);
+}
+
 /* Stream `code` into `cc -x c -` and wait for it. Returns the exit status. */
 static int run_cc(const Config *c, const char *out, const CodeGen *cg) {
     int fds[2];
@@ -201,7 +247,7 @@ static int run_cc(const Config *c, const char *out, const CodeGen *cg) {
 
     char optflag[8];
     snprintf(optflag, sizeof optflag, "-O%d", c->opt);
-    size_t cap = 16 + c->inc.n + c->extra.n + c->libdir.n + c->lib.n;
+    size_t cap = 18 + c->inc.n + c->extra.n + c->libdir.n + c->lib.n;
     const char **argv = malloc(cap * sizeof *argv);
     if (!argv) { fprintf(stderr, "out of memory\n"); return 1; }
     size_t n = 0;
@@ -222,6 +268,7 @@ static int run_cc(const Config *c, const char *out, const CodeGen *cg) {
         for (size_t i = 0; i < c->extra.n; i++)  argv[n++] = c->extra.v[i];
         for (size_t i = 0; i < c->libdir.n; i++) argv[n++] = c->libdir.v[i];
         for (size_t i = 0; i < c->lib.n; i++)    argv[n++] = c->lib.v[i];
+        if (c->stdlib_a) argv[n++] = c->stdlib_a;
         if (cg->gc && cg->uses_heap) argv[n++] = "-lgc";
         argv[n++] = "-lm";
     }
@@ -290,22 +337,7 @@ static int real_main(int argc, char **argv) {
     Lexer lexer;
     lexer_init(&lexer, source, cfg.input, arena);
     Parser parser;
-    {   /* standard library: $TAMIZHI_LIB, then lib/ next to the compiler */
-        char exe[4096], buf[4200];
-        parser_add_lib_dir(getenv("TAMIZHI_LIB"));
-        ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-        if (n > 0) {
-            exe[n] = '\0';
-            char *slash = strrchr(exe, '/');
-            if (slash) *slash = '\0';
-            snprintf(buf, sizeof buf, "%s/lib", exe);
-            parser_add_lib_dir(arena_strdup(arena, buf));
-            snprintf(buf, sizeof buf, "%s/../lib/tamizhi", exe);
-            parser_add_lib_dir(arena_strdup(arena, buf));
-        }
-        parser_add_lib_dir("/usr/local/lib/tamizhi");
-        parser_add_lib_dir("/usr/lib/tamizhi");
-    }
+    stdlib_locate(arena, &cfg);
     parser_init(&parser, &lexer, arena);
     Node *ast = parse_program(&parser);
     double t_parse = now_ms();

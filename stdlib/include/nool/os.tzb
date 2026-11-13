@@ -1,0 +1,6 @@
+# nool/os.tzb — Tamizhi standard library: program arguments and environment
+veli "tz_std.h";
+veli seyal arg_count = tz_arg_count() : int;
+veli seyal arg_get = tz_arg_get(i : int) : string;
+veli seyal exit_program = tz_exit_program(code : int);
+veli seyal env_get = tz_env_get(name : string) : string;

@@ -1,0 +1,11 @@
+# nool/all.tzh — everything in the standard library at once
+serku "io.tzb";
+serku "string.tzb";
+serku "math.tzb";
+serku "os.tzb";
+serku "time.tzb";
+serku "fs.tzb";
+serku "process.tzb";
+serku "encoding.tzb";
+serku "regex.tzb";
+serku "listutil.tzh";

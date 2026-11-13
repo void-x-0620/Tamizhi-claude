@@ -1,0 +1,73 @@
+# nool/listutil.tzh — Tamizhi standard library written in Tamizhi: helpers for List<int>, List<float>, List<string>
+serku "string.tzb";
+
+seyal sum_int(xs: List<int>): int {
+    edu t = 0;
+    ovvoru (edu v ulle xs) { t += v; }
+    kudu t;
+}
+seyal sum_float(xs: List<float>): float {
+    edu t = 0.0;
+    ovvoru (edu v ulle xs) { t += v; }
+    kudu t;
+}
+seyal max_int(xs: List<int>): int {
+    edu m = xs.get(0);
+    ovvoru (edu v ulle xs) { @( v > m ) aga irundha { m = v; } }
+    kudu m;
+}
+seyal min_int(xs: List<int>): int {
+    edu m = xs.get(0);
+    ovvoru (edu v ulle xs) { @( v < m ) aga irundha { m = v; } }
+    kudu m;
+}
+seyal index_of_int(xs: List<int>, x: int): int {
+    ovvoru (edu i ulle 0 .. xs.length) { @( xs.get(i) == x ) aga irundha { kudu i; } }
+    kudu -1;
+}
+seyal contains_int(xs: List<int>, x: int): bool {
+    kudu index_of_int(xs, x) >= 0;
+}
+seyal index_of_str(xs: List<string>, x: string): int {
+    ovvoru (edu i ulle 0 .. xs.length) { @( str_cmp(xs.get(i), x) == 0 ) aga irundha { kudu i; } }
+    kudu -1;
+}
+seyal reverse_int(xs: List<int>) {
+    edu i = 0;
+    edu j = xs.length - 1;
+    sutri ( i < j ) {
+        edu t = xs.get(i);
+        xs.set(i, xs.get(j));
+        xs.set(j, t);
+        i++; j--;
+    }
+}
+seyal sort_int(xs: List<int>) {
+    ovvoru (edu i ulle 1 .. xs.length) {
+        edu k = xs.get(i);
+        edu j = i - 1;
+        sutri ( j >= 0 && xs.get(j) > k ) { xs.set(j + 1, xs.get(j)); j--; }
+        xs.set(j + 1, k);
+    }
+}
+seyal sort_float(xs: List<float>) {
+    ovvoru (edu i ulle 1 .. xs.length) {
+        edu k = xs.get(i);
+        edu j = i - 1;
+        sutri ( j >= 0 && xs.get(j) > k ) { xs.set(j + 1, xs.get(j)); j--; }
+        xs.set(j + 1, k);
+    }
+}
+seyal sort_str(xs: List<string>) {
+    ovvoru (edu i ulle 1 .. xs.length) {
+        edu k = xs.get(i);
+        edu j = i - 1;
+        sutri ( j >= 0 && str_cmp(xs.get(j), k) > 0 ) { xs.set(j + 1, xs.get(j)); j--; }
+        xs.set(j + 1, k);
+    }
+}
+seyal range_list(a: int, b: int): List<int> {
+    edu r = puthu List<int>();
+    ovvoru (edu i ulle a .. b) { r.push(i); }
+    kudu r;
+}

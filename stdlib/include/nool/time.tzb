@@ -1,0 +1,18 @@
+# nool/time.tzb — Tamizhi standard library: clock, sleeping and random numbers
+veli "tz_std.h";
+veli seyal clock_ms = tz_clock_ms() : int;
+veli seyal time_now = tz_time_now() : int;
+veli seyal sleep_ms = tz_sleep_ms(ms : int);
+veli seyal rand_seed = tz_rand_seed(n : int);
+veli seyal rand_int = tz_rand_int(lo : int, hi : int) : int;
+veli seyal rand_float = tz_rand_float() : float;
+veli seyal format_time = tz_format_time(ts : int, fmt : string) : string;   # strftime, local time
+veli seyal now_iso   = tz_now_iso() : string;
+veli seyal year      = tz_year(ts : int) : int;
+veli seyal month     = tz_month(ts : int) : int;
+veli seyal day       = tz_day(ts : int) : int;
+veli seyal hour      = tz_hour(ts : int) : int;
+veli seyal minute    = tz_minute(ts : int) : int;
+veli seyal second    = tz_second(ts : int) : int;
+veli seyal weekday   = tz_weekday(ts : int) : int;                  # 0 = Sunday
+veli seyal rand_seed_now = tz_rand_seed_now();

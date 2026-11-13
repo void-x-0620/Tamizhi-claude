@@ -1,0 +1,30 @@
+# nool/string.tzb — Tamizhi standard library: text helpers
+veli "tz_std.h";
+veli seyal str_len     = tz_str_len(s : string) : int;
+veli seyal str_sub     = tz_str_sub(s : string, start : int, len : int) : string;
+veli seyal str_find    = tz_str_find(s : string, needle : string) : int;   # -1 if absent
+veli seyal str_upper   = tz_str_upper(s : string) : string;
+veli seyal str_lower   = tz_str_lower(s : string) : string;
+veli seyal str_trim    = tz_str_trim(s : string) : string;
+veli seyal str_starts  = tz_str_starts(s : string, prefix : string) : int;
+veli seyal str_ends    = tz_str_ends(s : string, suffix : string) : int;
+veli seyal str_replace = tz_str_replace(s : string, from : string, to : string) : string;
+veli seyal str_repeat  = tz_str_repeat(s : string, n : int) : string;
+veli seyal chr         = tz_chr(code : int) : string;
+veli seyal int_to_str  = tz_int_to_str(v : int) : string;
+veli seyal float_to_str = tz_float_to_str(v : float) : string;
+veli seyal parse_int   = tz_parse_int(s : string) : int;
+veli seyal parse_float = tz_parse_float(s : string) : float;
+veli seyal char_at     = tz_char_at(s : string, i : int) : int;      # character code, -1 if out of range
+veli seyal ord         = tz_ord(s : string) : int;
+veli seyal str_reverse = tz_str_reverse(s : string) : string;
+veli seyal str_count   = tz_str_count(s : string, sub : string) : int;
+veli seyal str_pad_left  = tz_str_pad_left(s : string, width : int, fill : string) : string;
+veli seyal str_pad_right = tz_str_pad_right(s : string, width : int, fill : string) : string;
+veli seyal str_cmp     = tz_str_cmp(a : string, b : string) : int;  # -1, 0 or 1
+veli seyal str_is_digits = tz_str_is_digits(s : string) : int;
+veli seyal str_is_alpha  = tz_str_is_alpha(s : string) : int;
+veli seyal str_capitalize = tz_str_capitalize(s : string) : string;
+veli seyal to_hex      = tz_to_hex(v : int) : string;
+veli seyal to_bin      = tz_to_bin(v : int) : string;
+veli seyal parse_int_base = tz_parse_int_base(s : string, base : int) : int;

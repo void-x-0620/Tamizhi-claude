@@ -1,0 +1,6 @@
+# nool/process.tzb — Tamizhi standard library: running other programs
+veli "tz_std.h";
+veli seyal run_command     = tz_run_command(cmd : string) : int;     # exit status
+veli seyal capture_command = tz_capture_command(cmd : string) : string;   # its standard output; illai on failure
+veli seyal get_pid  = tz_get_pid() : int;
+veli seyal hostname = tz_hostname() : string;

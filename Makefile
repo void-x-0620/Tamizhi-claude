@@ -13,9 +13,37 @@ SRCS     := main.c util.c lexer.c ast.c parser.c sema.c codegen.c
 OBJS     := $(SRCS:.c=.o)
 HDRS     := tamizhi.h lexer.h ast.h parser.h sema.h codegen.h
 
-.PHONY: all test asan clean
+.PHONY: all test asan clean stdlib install uninstall
 
-all: $(TARGET)
+all: $(TARGET) stdlib
+
+# The standard library: stdlib/include/nool/* (declarations) + libtamizhi.a (compiled).
+LIBSRCS  := $(wildcard stdlib/src/*.c)
+LIBOBJS  := $(LIBSRCS:.c=.o)
+stdlib: stdlib/lib/libtamizhi.a
+
+stdlib/src/%.o: stdlib/src/%.c stdlib/include/nool/tz_std.h
+	$(CC) -std=gnu11 -Wall -Wextra -O2 -Istdlib/include/nool -c -o $@ $<
+
+stdlib/lib/libtamizhi.a: $(LIBOBJS)
+	mkdir -p stdlib/lib
+	rm -f $@
+	ar rcs $@ $^
+
+# Install layout mirrors /usr:  <PREFIX>/include/tamizhi  and  <PREFIX>/lib/tamizhi
+#   make install                  per user:  ~/.local/share/{include,lib}/tamizhi  (default for now)
+#   sudo make install PREFIX=/usr system:    /usr/include/tamizhi  /usr/lib/tamizhi
+PREFIX ?= $(HOME)/.local/share
+BINDIR ?= $(HOME)/.local/bin
+install: all
+	mkdir -p $(PREFIX)/include/tamizhi $(PREFIX)/lib/tamizhi $(BINDIR)
+	cp -r stdlib/include/nool $(PREFIX)/include/tamizhi/
+	cp stdlib/lib/libtamizhi.a $(PREFIX)/lib/tamizhi/
+	install -m 755 $(TARGET) $(BINDIR)/$(TARGET)
+	@echo "installed: $(PREFIX)/include/tamizhi  $(PREFIX)/lib/tamizhi  $(BINDIR)/$(TARGET)"
+
+uninstall:
+	rm -rf $(PREFIX)/include/tamizhi $(PREFIX)/lib/tamizhi $(BINDIR)/$(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ -lm -lpthread
@@ -39,7 +67,7 @@ BIN ?= ./$(TARGET)
 # GCFLAGS lets the --gc test find libgc, e.g. `make test GCFLAGS=-L/opt/gc/lib`.
 GCFLAGS ?=
 
-test: $(TARGET)
+test: $(TARGET) stdlib
 	@tmp=$$(mktemp -d); pass=0; fail=0; \
 	echo "── program tests (compile, run, compare output) ──"; \
 	for tz in tests/*.tz; do \
@@ -73,6 +101,7 @@ test: $(TARGET)
 	run "typed catch / finally" tests/v21/typed_try.expected $(BIN) tests/v21/typed_try.tz --no-gc -o $$tmp/out; \
 	run "calling Fn values" tests/v21/fncall.expected $(BIN) tests/v21/fncall.tz --no-gc -o $$tmp/out; \
 	run "interfaces" tests/v21/iface.expected $(BIN) tests/v21/iface.tz --no-gc -o $$tmp/out; \
+	run "stdlib: fs/regex/hash/..." tests/v21/stdlib2.expected $(BIN) tests/v21/stdlib2.tz --no-gc -o $$tmp/out; \
 	run "abstract classes" tests/v21/abstract.expected $(BIN) tests/v21/abstract.tz --no-gc -o $$tmp/out; \
 	run "lambdas" tests/v21/lambda.expected $(BIN) tests/v21/lambda.tz --no-gc -o $$tmp/out; \
 	run "standard library" tests/v21/stdlib.expected $(BIN) tests/v21/stdlib.tz --no-gc -o $$tmp/out; \
@@ -124,4 +153,5 @@ test: $(TARGET)
 	[ $$fail -eq 0 ]
 
 clean:
+	rm -f stdlib/src/*.o stdlib/lib/libtamizhi.a
 	rm -f $(OBJS) $(TARGET) $(TARGET)-asan

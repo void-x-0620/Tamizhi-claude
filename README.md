@@ -171,3 +171,12 @@ time and stop the program with `file:line: runtime error: ...`. `--no-checks` re
   either order. Put calls with side effects in separate statements.
 - Global initialisers that are not constants (calls, other variables, string `+`) run before
   `main`, in declaration order.
+
+## Standard library and install
+
+```
+make            # builds ./tamizhi and stdlib/lib/libtamizhi.a
+make install    # ~/.local/share/include/tamizhi, ~/.local/share/lib/tamizhi, ~/.local/bin/tamizhi
+sudo make install PREFIX=/usr BINDIR=/usr/bin   # system layout: /usr/include/tamizhi, /usr/lib/tamizhi
+```
+Then `serku "nool/all.tzh";` in any program. See SYNTAX.md ("Standard library") for the module list.
