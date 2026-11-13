@@ -105,7 +105,7 @@ TypeInfo *type_new(Arena *a, TypeKind kind) {
     t->kind = kind; t->elem_type = NULL; t->struct_name = NULL;
     t->array_size = -1;
     t->tname = t->cname = NULL; t->bits = 0; t->is_unsigned = false;
-    t->fparams = NULL; t->fret = NULL;
+    t->fparams = NULL; t->fret = NULL; t->key_type = NULL; t->is_set = false;
     return t;
 }
 
@@ -120,6 +120,9 @@ bool type_same(const TypeInfo *a, const TypeInfo *b) {
             return !strcmp(a->struct_name, b->struct_name);
         case TY_POINTER: case TY_ARRAY: case TY_LIST:
             return type_same(a->elem_type, b->elem_type);
+        case TY_MAP:
+            return a->is_set == b->is_set && type_same(a->key_type, b->key_type) &&
+                   type_same(a->elem_type, b->elem_type);
         case TY_FUNC: {
             if (!type_same(a->fret, b->fret)) return false;
             const Param *x = a->fparams, *y = b->fparams;

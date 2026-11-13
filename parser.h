@@ -58,6 +58,7 @@ typedef struct {
     int     switch_depth; /* inside thervu: udai is allowed here too */
     bool    binding;      /* parsing a binding file: only veli/serku allowed */
     bool    saw_header;   /* a 'veli "x.h"' came before: prototypes trusted */
+    int nest;                        /* recursion depth guard */
     NodeList *lam_head, *lam_tail;   /* lifted lambdas, appended to the program */
     ImportSet *imports;   /* shared by the main file and everything it imports */
 } Parser;

@@ -39,7 +39,7 @@ syn keyword tzBuiltin pathi
 " Types and literals
 syn keyword tzType int float string bool void char
 syn keyword tzType i8 i16 i32 i64 u8 u16 u32 u64 uchar short ushort uint long ulong
-syn keyword tzType usize isize f32 f64 ldouble List
+syn keyword tzType usize isize f32 f64 ldouble List Map Set
 syn keyword tzBoolean true false
 
 syn match tzNumber "\<\d\+\>"

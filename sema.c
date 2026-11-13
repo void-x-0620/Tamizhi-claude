@@ -134,12 +134,12 @@ static bool is_integral(TypeInfo *t) {
 static bool is_scalar(TypeInfo *t) {
     return is_arith(t) || t->kind == TY_POINTER || t->kind == TY_CLASS ||
            t->kind == TY_STRING || t->kind == TY_FUNC || t->kind == TY_NULL ||
-           t->kind == TY_LIST;
+           t->kind == TY_LIST || t->kind == TY_MAP;
 }
 static bool is_ptrish(TypeInfo *t) {               /* can be compared to illai */
     return t->kind == TY_POINTER || t->kind == TY_CLASS ||
            t->kind == TY_STRING || t->kind == TY_FUNC || t->kind == TY_NULL ||
-           t->kind == TY_LIST;
+           t->kind == TY_LIST || t->kind == TY_MAP;
 }
 static bool is_byte(TypeInfo *t) {                 /* char-like element */
     return t && t->kind == TY_INT && t->bits == 8;
@@ -157,6 +157,9 @@ static const char *type_str(Sema *s, TypeInfo *t) {
         case TY_UNKNOWN: return "unknown";
         case TY_POINTER: return tfmt(s, "%s*", type_str(s, t->elem_type));
         case TY_LIST:    return tfmt(s, "List<%s>", type_str(s, t->elem_type));
+        case TY_MAP:     return t->is_set ? tfmt(s, "Set<%s>", type_str(s, t->key_type))
+                                          : tfmt(s, "Map<%s, %s>", type_str(s, t->key_type),
+                                                 type_str(s, t->elem_type));
         case TY_ARRAY:
             if (t->array_size > 0)
                 return tfmt(s, "%s[%d]", type_str(s, t->elem_type), t->array_size);
@@ -324,6 +327,23 @@ static void resolve_type(Sema *s, TypeInfo *t, int line, int col) {
         case TY_ARRAY: case TY_POINTER: case TY_LIST:
             resolve_type(s, t->elem_type, line, col);
             return;
+        case TY_MAP:
+            resolve_type(s, t->key_type, line, col);
+            resolve_type(s, t->elem_type, line, col);
+            if (!is_unknown(t->elem_type) && !t->is_set &&
+                (t->elem_type->kind == TY_FUNC || t->elem_type->kind == TY_ARRAY ||
+                 t->elem_type->kind == TY_VOID))
+                report_error(s->filename, line, col,
+                             "Map values cannot be %s; wrap it in a struct or class",
+                             t->elem_type->kind == TY_FUNC ? "function types" :
+                             t->elem_type->kind == TY_ARRAY ? "arrays" : "void");
+            if (!is_unknown(t->key_type) && t->key_type->kind != TY_INT &&
+                t->key_type->kind != TY_BOOL && t->key_type->kind != TY_ENUM &&
+                t->key_type->kind != TY_STRING)
+                report_error(s->filename, line, col,
+                             "%s keys must be an integer, char, bool, enum or string, not %s",
+                             t->is_set ? "Set" : "Map", type_str(s, t->key_type));
+            return;
         case TY_FUNC:
             for (Param *p = t->fparams; p; p = p->next)
                 resolve_type(s, p->type, line, col);
@@ -445,6 +465,13 @@ static bool assignable(Sema *s, TypeInfo *d, TypeInfo *src, Node *node) {
         case TY_FUNC:
             return src->kind == TY_NULL ||
                    (src->kind == TY_FUNC && type_same(d, src));
+        case TY_MAP:
+            return src->kind == TY_NULL ||
+                   (src->kind == TY_MAP && d->is_set == src->is_set &&
+                    (is_unknown(d->key_type) || is_unknown(src->key_type) ||
+                     type_same(d->key_type, src->key_type)) &&
+                    (is_unknown(d->elem_type) || is_unknown(src->elem_type) ||
+                     type_same(d->elem_type, src->elem_type)));
         case TY_LIST:
             return src->kind == TY_NULL ||
                    (src->kind == TY_LIST &&
@@ -489,6 +516,7 @@ static const char *const_root(Sema *s, Node *n) {
 }
 
 static void check_modifiable(Sema *s, Node *target) {
+    if (target->kind == NK_INDEX) target->as_lvalue = true;
     const char *c = const_root(s, target);
     if (c)
         report_error(s->filename, target->line, target->col,
@@ -890,6 +918,20 @@ static TypeInfo *expr(Sema *s, Node *n) {
         case NK_LIST_NEW: {
             TypeInfo *lt = n->list_new.ltype;
             resolve_type(s, lt, n->line, n->col);
+            if (lt->kind == TY_MAP) {
+                if (!lt->is_set && n->list_new.items)
+                    report_error(s->filename, n->line, n->col,
+                                 "a Map is created empty: puthu Map<K, V>(); then use put() or m[k] = v");
+                int i = 1;
+                for (NodeList *a = n->list_new.items; lt->is_set && a; a = a->next, i++) {
+                    TypeInfo *at = expr(s, a->node);
+                    if (!assignable(s, lt->key_type, at, a->node))
+                        report_error(s->filename, a->node->line, a->node->col,
+                                     "set item %d: expected %s but got %s", i,
+                                     type_str(s, lt->key_type), type_str(s, at));
+                }
+                return n->type = lt;
+            }
             if (!is_unknown(lt->elem_type) && lt->elem_type->kind == TY_VOID)
                 report_error(s->filename, n->line, n->col, "List<void> is not allowed");
             if (!is_unknown(lt->elem_type) && lt->elem_type->kind == TY_ARRAY)
@@ -1086,6 +1128,18 @@ static TypeInfo *expr(Sema *s, Node *n) {
         case NK_INDEX: {
             TypeInfo *at = expr(s, n->index.array);
             TypeInfo *it = expr(s, n->index.index);
+            if (!is_unknown(at) && at->kind == TY_MAP) {
+                if (at->is_set) {
+                    report_error(s->filename, n->line, n->col,
+                                 "a Set has no values to index; use has(), add() and remove()");
+                    return n->type = &ty_unknown;
+                }
+                if (!assignable(s, at->key_type, it, n->index.index))
+                    report_error(s->filename, n->index.index->line, n->index.index->col,
+                                 "this %s needs %s keys, not %s", type_str(s, at),
+                                 type_str(s, at->key_type), type_str(s, it));
+                return n->type = at->elem_type;
+            }
             if (!is_integral(it))
                 report_error(s->filename, n->index.index->line,
                              n->index.index->col,
@@ -1183,7 +1237,8 @@ static TypeInfo *member_expr(Sema *s, Node *n) {
     if (is_unknown(ot)) return &ty_unknown;
 
     if (!strcmp(fname, "length") &&
-        (ot->kind == TY_ARRAY || ot->kind == TY_STRING || ot->kind == TY_LIST)) {
+        (ot->kind == TY_ARRAY || ot->kind == TY_STRING || ot->kind == TY_LIST ||
+         ot->kind == TY_MAP)) {
         if (ot->kind == TY_ARRAY) {
             if (ot->array_size <= 0) {
                 report_error(s->filename, n->line, n->col,
@@ -1195,7 +1250,7 @@ static TypeInfo *member_expr(Sema *s, Node *n) {
             n->int_lit.is_unsigned = false;
             n->int_lit.is_char = false;
         } else {
-            n->member.hops = ot->kind == TY_STRING ? -2 : -3;
+            n->member.hops = ot->kind == TY_STRING ? -2 : ot->kind == TY_MAP ? -4 : -3;
         }
         return &ty_int;
     }
@@ -1353,6 +1408,62 @@ static TypeInfo *mcall_expr(Sema *s, Node *n) {
         }
         n->mcall.builtin = id;
         return (id == 2 || id == 3 || id == 6) ? ot->elem_type : &ty_void;
+    }
+
+    if (ot->kind == TY_MAP) {
+        static const struct { const char *name; int argc; int id; bool set; } MM[] = {
+            { "put", 2, 11, false }, { "get", 1, 12, false }, { "get_or", 2, 13, false },
+            { "has", 1, 14, false }, { "remove", 1, 15, false }, { "clear", 0, 16, false },
+            { "keys", 0, 17, false }, { "values", 0, 18, false },
+            { "add", 1, 21, true }, { "has", 1, 22, true }, { "remove", 1, 23, true },
+            { "clear", 0, 24, true }, { "items", 0, 25, true },
+        };
+        int k = -1;
+        for (size_t i = 0; i < sizeof MM / sizeof MM[0]; i++)
+            if (MM[i].set == ot->is_set && !strcmp(MM[i].name, mname)) k = (int)i;
+        if (k < 0) {
+            report_error(s->filename, n->line, n->col, ot->is_set
+                         ? "Set has no method '%s' (add has remove clear items, and .length)"
+                         : "Map has no method '%s' (put get get_or has remove clear keys values, "
+                           "and .length)", mname);
+            expr_list(s, n->mcall.args);
+            return &ty_unknown;
+        }
+        int argc = 0;
+        for (NodeList *a = n->mcall.args; a; a = a->next) argc++;
+        if (argc != MM[k].argc) {
+            report_error(s->filename, n->line, n->col, "%s.%s takes %d argument(s), not %d",
+                         ot->is_set ? "Set" : "Map", mname, MM[k].argc, argc);
+            expr_list(s, n->mcall.args);
+            return &ty_unknown;
+        }
+        int id = MM[k].id;
+        NodeList *a1 = n->mcall.args, *a2 = a1 ? a1->next : NULL;
+        if (a1) {
+            TypeInfo *kt = expr(s, a1->node);
+            if (!assignable(s, ot->key_type, kt, a1->node))
+                report_error(s->filename, a1->node->line, a1->node->col,
+                             "%s.%s needs a %s key, not %s", ot->is_set ? "Set" : "Map",
+                             mname, type_str(s, ot->key_type), type_str(s, kt));
+        }
+        if (a2) {
+            TypeInfo *vt = expr(s, a2->node);
+            if (!assignable(s, ot->elem_type, vt, a2->node))
+                report_error(s->filename, a2->node->line, a2->node->col,
+                             "cannot store %s in a %s", type_str(s, vt), type_str(s, ot));
+        }
+        n->mcall.builtin = id;
+        switch (id) {
+            case 12: case 13: return ot->elem_type;
+            case 14: case 15: case 22: case 23: return &ty_bool;
+            case 21: return &ty_bool;
+            case 17: case 25: case 18: {
+                TypeInfo *lt = type_new(s->arena, TY_LIST);
+                lt->elem_type = id == 18 ? ot->elem_type : ot->key_type;
+                return lt;
+            }
+            default: return &ty_void;
+        }
     }
 
     if (ot->kind == TY_CLASS) {
@@ -2057,6 +2168,7 @@ static void stmt(Sema *s, Node *n) {
                         report_error(s->filename, n->line, n->col,
                                      "loop over a variable, not a computed expression");
                 } else if (ct->kind == TY_LIST) et = ct->elem_type;
+                else if (ct->kind == TY_MAP) et = ct->key_type;      /* keys, in insertion order */
                 else if (ct->kind == TY_STRING) et = &ty_char;
                 else
                     report_error(s->filename, n->line, n->col,

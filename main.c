@@ -15,6 +15,7 @@
 #include <time.h>
 #include <signal.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
 
@@ -45,6 +46,7 @@ typedef struct {
     StrList     extra;       /* extra .c/.o/.a files to link    */
     bool        gc;          /* --gc (default) / --no-gc        */
     bool        checks;      /* runtime checks (default) / --no-checks */
+    bool        lines, debug; /* #line directives / pass -g to the C compiler */
     const char *input;
     const char *output;      /* NULL = default for the chosen mode */
     const char *cc;
@@ -71,6 +73,7 @@ static void usage(const char *prog) {
         "  --gc             garbage-collect heap data with Boehm GC (default;\n"
         "                   needs libgc only if the program allocates)\n"
         "  --no-gc          use plain malloc, never freed (no libgc needed)\n"
+        "  -g               debug info: gdb and cc messages show .tz lines (--lines: #line only)\n"
         "  --no-warn        hide warnings (unused variables)   -Werror  make them errors\n"
         "  --color=WHEN     auto (default), always or never\n"
         "  --no-checks      drop the runtime null / bounds / divide-by-zero checks\n"
@@ -131,6 +134,8 @@ static bool parse_args(int argc, char **argv, Config *c) {
         else if (!strcmp(a, "--no-gc")) c->gc = false;
         else if (!strcmp(a, "--no-checks")) c->checks = false;
         else if (!strcmp(a, "--no-warn")) g_warnings_enabled = false;
+        else if (!strcmp(a, "-g")) { c->debug = true; c->lines = true; }
+        else if (!strcmp(a, "--lines")) c->lines = true;
         else if (!strcmp(a, "-Werror")) g_warnings_are_errors = true;
         else if (!strcmp(a, "--color=always")) g_color = 1;
         else if (!strcmp(a, "--color=never"))  g_color = 0;
@@ -202,6 +207,7 @@ static int run_cc(const Config *c, const char *out, const CodeGen *cg) {
     size_t n = 0;
     argv[n++] = c->cc;
     argv[n++] = optflag;
+    if (c->debug) argv[n++] = "-g";
     if (!c->verbose) argv[n++] = "-w";
     if (c->emit_obj) argv[n++] = "-c";
     argv[n++] = "-o";
@@ -261,7 +267,7 @@ static char *default_object_name(const char *input) {
     return out;
 }
 
-int main(int argc, char **argv) {
+static int real_main(int argc, char **argv) {
     Config cfg;
     if (!parse_args(argc, argv, &cfg)) return 2;
     signal(SIGPIPE, SIG_IGN);
@@ -339,6 +345,7 @@ int main(int argc, char **argv) {
     cg_ready = true;
     cg.gc = cfg.gc;
     cg.checks = cfg.checks;
+    cg.lines = cfg.lines;
     codegen_generate(&cg, ast);
     double t_gen = now_ms();
 
@@ -387,4 +394,24 @@ done:
     arena_destroy(arena);
     free(source);
     return rc;
+}
+
+/* The tree is walked recursively, so a pathological input (a 200,000-term
+ * sum, say) needs a deep stack: run the compiler on a thread with a big one. */
+typedef struct { int argc; char **argv; int rc; } MainArgs;
+static void *main_thread(void *v) {
+    MainArgs *a = v;
+    a->rc = real_main(a->argc, a->argv);
+    return NULL;
+}
+
+int main(int argc, char **argv) {
+    MainArgs a = { argc, argv, 0 };
+    pthread_t th;
+    pthread_attr_t at;
+    pthread_attr_init(&at);
+    pthread_attr_setstacksize(&at, (size_t)1 << 30);      /* 1 GiB, committed lazily */
+    if (pthread_create(&th, &at, main_thread, &a) != 0) return real_main(argc, argv);
+    pthread_join(th, NULL);
+    return a.rc;
 }

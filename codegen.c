@@ -421,6 +421,109 @@ static int list_index(CodeGen *cg, TypeInfo *elem) {
     return n;
 }
 
+/* Map<K,V> / Set<T>: an insertion-ordered open-addressing hash table. The
+ * entries live in two parallel arrays (iteration order = insertion order);
+ * `tab` maps hash slots to entry index + 1. */
+static int map_index(CodeGen *cg, TypeInfo *mt) {
+    const char *K = decl_str(cg, mt->key_type, "");
+    const char *V = decl_str(cg, mt->elem_type, "");
+    const char *key = tfmt(cg, "%s|%s|%d", K, V, mt->is_set);
+    for (int i = 0; i < cg->nmaps; i++)
+        if (!strcmp(cg->map_keys[i], key)) return i;
+    if (cg->nmaps >= 256) { fputs("tamizhi: too many Map/Set types\n", stderr); exit(1); }
+    int n = cg->nmaps++;
+    cg->map_keys[n] = key;
+    cg->uses_heap = true;
+    if (cg->checks) cg->uses_checks = true;
+
+    const char *M = tfmt(cg, "tz_Map_%d", n);
+    const char *Kd = decl_str(cg, mt->key_type, "k");
+    const char *Vp = decl_str(cg, type_pointer(cg->arena, mt->elem_type), "");
+    bool str = mt->key_type->kind == TY_STRING;
+    const char *hash = str
+        ? "    unsigned long long h = 1469598103934665603ULL;\n"
+          "    for (const unsigned char *p = (const unsigned char *)k; *p; p++) { h ^= *p; h *= 1099511628211ULL; }\n"
+          "    return h;\n"
+        : "    unsigned long long h = (unsigned long long)k * 0x9E3779B97F4A7C15ULL;\n"
+          "    return h ^ (h >> 29);\n";
+    const char *eq = str ? "!strcmp(m->keys[e], k)" : "m->keys[e] == k";
+    const char *nn = cg->checks
+        ? "    if (!m) tz_fail(line, \"null Map/Set (illai) used\", 0, 0);\n" : "";
+    const char *miss = cg->checks
+        ? "    if (i < 0) tz_fail(line, \"key not found in the Map\", 0, 0);\n"
+        : "    if (i < 0) { memset(&z, 0, sizeof z); return z; }\n";
+    StrBuf *o = &cg->lists;
+
+    strbuf_appendf(o, "struct %s { %s *keys; %s *vals; long long *tab; long long len, cap, tcap; };\n",
+                   M, K, V);
+    strbuf_appendf(o, "static %s *%s_new(void) __attribute__((unused));\n"
+                      "static %s *%s_new(void) { return (%s *)tz_alloc_obj(sizeof(%s)); }\n",
+                   M, M, M, M, M, M);
+    strbuf_appendf(o, "static unsigned long long %s_hash(%s) {\n%s}\n", M, Kd, hash);
+    strbuf_appendf(o, "static void %s_rebuild(%s *m) {\n"
+                      "    long long tc = 8;\n    while (tc < m->cap * 2) tc *= 2;\n"
+                      "    m->tab = (long long *)tz_alloc_obj((size_t)tc * sizeof(long long));\n    m->tcap = tc;\n"
+                      "    for (long long i = 0; i < m->len; i++) {\n"
+                      "        unsigned long long h = %s_hash(m->keys[i]) & (unsigned long long)(tc - 1);\n"
+                      "        while (m->tab[h]) h = (h + 1) & (unsigned long long)(tc - 1);\n"
+                      "        m->tab[h] = i + 1;\n    }\n}\n", M, M, M);
+    strbuf_appendf(o, "static long long %s_find(%s *m, %s) {\n"
+                      "    if (!m->tcap) return -1;\n"
+                      "    unsigned long long h = %s_hash(k) & (unsigned long long)(m->tcap - 1);\n"
+                      "    while (m->tab[h]) {\n"
+                      "        long long e = m->tab[h] - 1;\n"
+                      "        if (%s) return e;\n"
+                      "        h = (h + 1) & (unsigned long long)(m->tcap - 1);\n    }\n    return -1;\n}\n",
+                   M, M, Kd, M, eq);
+    strbuf_appendf(o, "static long long %s_slot(%s *m, %s) {           /* index of k, adding it if new */\n"
+                      "    long long i = %s_find(m, k);\n    if (i >= 0) return i;\n"
+                      "    if (m->len == m->cap) {\n"
+                      "        long long nc = m->cap ? m->cap * 2 : 4;\n"
+                      "        m->keys = (%s *)tz_grow(m->keys, (size_t)m->cap * sizeof(%s), (size_t)nc * sizeof(%s));\n"
+                      "        m->vals = (%s *)tz_grow(m->vals, (size_t)m->cap * sizeof(%s), (size_t)nc * sizeof(%s));\n"
+                      "        m->cap = nc;\n        %s_rebuild(m);\n    }\n"
+                      "    m->keys[m->len] = k;\n    memset(&m->vals[m->len], 0, sizeof(%s));\n    m->len++;\n"
+                      "    unsigned long long h = %s_hash(k) & (unsigned long long)(m->tcap - 1);\n"
+                      "    while (m->tab[h]) h = (h + 1) & (unsigned long long)(m->tcap - 1);\n"
+                      "    m->tab[h] = m->len;\n    return m->len - 1;\n}\n",
+                   M, M, Kd, M, K, K, K, V, V, V, M, V, M);
+    strbuf_appendf(o, "static long long %s_len(%s *m, int line) __attribute__((unused));\n"
+                      "static long long %s_len(%s *m, int line) {\n%s    return m->len;\n}\n", M, M, M, M, nn);
+    strbuf_appendf(o, "static %s *%s_ref(%s *m, %s, int line) __attribute__((unused));\n"
+                      "static %s *%s_ref(%s *m, %s, int line) {\n%s    long long i = %s_slot(m, k);\n    return &m->vals[i];\n}\n",
+                   V, M, M, Kd, V, M, M, Kd, nn, M);
+    strbuf_appendf(o, "static %s %s_get(%s *m, %s, int line) __attribute__((unused));\n"
+                      "static %s %s_get(%s *m, %s, int line) {\n%s%s    long long i = %s_find(m, k);\n%s"
+                      "    return m->vals[i];\n}\n",
+                   V, M, M, Kd, V, M, M, Kd, nn,
+                   cg->checks ? "" : tfmt(cg, "    %s z;\n", V), M, miss);
+    strbuf_appendf(o, "static %s %s_get_or(%s *m, %s, %s, int line) __attribute__((unused));\n"
+                      "static %s %s_get_or(%s *m, %s, %s, int line) {\n%s    long long i = %s_find(m, k);\n"
+                      "    return i < 0 ? d : m->vals[i];\n}\n",
+                   V, M, M, Kd, decl_str(cg, mt->elem_type, "d"),
+                   V, M, M, Kd, decl_str(cg, mt->elem_type, "d"), nn, M);
+    strbuf_appendf(o, "static int %s_has(%s *m, %s, int line) __attribute__((unused));\n"
+                      "static int %s_has(%s *m, %s, int line) {\n%s    return %s_find(m, k) >= 0;\n}\n",
+                   M, M, Kd, M, M, Kd, nn, M);
+    strbuf_appendf(o, "static int %s_insert(%s *m, %s, int line) __attribute__((unused));\n"
+                      "static int %s_insert(%s *m, %s, int line) {\n%s    long long before = m->len;\n"
+                      "    %s_slot(m, k);\n    return m->len != before;\n}\n",
+                   M, M, Kd, M, M, Kd, nn, M);
+    strbuf_appendf(o, "static int %s_remove(%s *m, %s, int line) __attribute__((unused));\n"
+                      "static int %s_remove(%s *m, %s, int line) {\n%s    long long i = %s_find(m, k);\n"
+                      "    if (i < 0) return 0;\n"
+                      "    memmove(&m->keys[i], &m->keys[i + 1], (size_t)(m->len - i - 1) * sizeof(%s));\n"
+                      "    memmove(&m->vals[i], &m->vals[i + 1], (size_t)(m->len - i - 1) * sizeof(%s));\n"
+                      "    m->len--;\n    %s_rebuild(m);\n    return 1;\n}\n",
+                   M, M, Kd, M, M, Kd, nn, M, K, V, M);
+    strbuf_appendf(o, "static void %s_clear(%s *m, int line) __attribute__((unused));\n"
+                      "static void %s_clear(%s *m, int line) {\n%s    m->len = 0;\n"
+                      "    if (m->tcap) memset(m->tab, 0, (size_t)m->tcap * sizeof(long long));\n}\n\n",
+                   M, M, M, M, nn);
+    (void)Vp;
+    return n;
+}
+
 static const char *decl_str(CodeGen *cg, TypeInfo *t, const char *inner) {
     if (!t) t = &ty_unknown;
     switch (t->kind) {
@@ -453,6 +556,7 @@ static const char *decl_str(CodeGen *cg, TypeInfo *t, const char *inner) {
         case TY_STRUCT: base = tfmt(cg, "tz_%s", t->struct_name); break;
         case TY_CLASS:  base = tfmt(cg, "tz_%s *", t->struct_name); break;
         case TY_LIST:   base = tfmt(cg, "tz_List_%d *", list_index(cg, t->elem_type)); break;
+        case TY_MAP:    base = tfmt(cg, "tz_Map_%d *", map_index(cg, t)); break;
         default:        base = "long long"; break;
     }
     size_t bl = strlen(base);
@@ -576,6 +680,12 @@ static void gen_member(CodeGen *cg, Node *n) {
         emit(cg, "))");
         return;
     }
+    if (n->member.hops == -4) {                       /* Map / Set .length */
+        emitf(cg, "tz_Map_%d_len(", map_index(cg, ot));
+        gen_expr(cg, obj);
+        emitf(cg, ", %d)", n->line);
+        return;
+    }
     if (n->member.hops == -3) {                       /* List.length  */
         emitf(cg, "tz_List_%d_len(", list_index(cg, ot->elem_type));
         gen_expr(cg, obj);
@@ -623,9 +733,44 @@ static void gen_list_call(CodeGen *cg, Node *n) {
     if (id == 4) { emit(cg, " = "); gen_conv(cg, et, a2); emit(cg, ")"); }
 }
 
+static void gen_map_call(CodeGen *cg, Node *n) {
+    TypeInfo *mt = n->mcall.object->type;
+    int id = n->mcall.builtin;
+    const char *M = tfmt(cg, "tz_Map_%d", map_index(cg, mt));
+    Node *a1 = n->mcall.args ? n->mcall.args->node : NULL;
+    Node *a2 = n->mcall.args && n->mcall.args->next ? n->mcall.args->next->node : NULL;
+    const char *fn = "";
+    switch (id) {
+        case 11: fn = "ref"; break;     case 12: fn = "get"; break;
+        case 13: fn = "get_or"; break;  case 14: case 22: fn = "has"; break;
+        case 15: case 23: fn = "remove"; break;
+        case 16: case 24: fn = "clear"; break;
+        case 21: fn = "insert"; break;
+        default: break;
+    }
+    if (id == 17 || id == 18 || id == 25) {        /* keys() / values() / items() -> List */
+        TypeInfo *et = id == 18 ? mt->elem_type : mt->key_type;
+        const char *L = tfmt(cg, "tz_List_%d", list_index(cg, et));
+        emitf(cg, "({ %s *_m = ", M);
+        gen_expr(cg, n->mcall.object);
+        emitf(cg, "; %s *_l = %s_new(); long long _n = %s_len(_m, %d); "
+                  "for (long long _i = 0; _i < _n; _i++) %s_push(_l, _m->%s[_i], %d); _l; })",
+              L, L, M, n->line, L, id == 18 ? "vals" : "keys", n->line);
+        return;
+    }
+    if (id == 11) emit(cg, "(void)(*");
+    emitf(cg, "%s_%s(", M, fn);
+    gen_expr(cg, n->mcall.object);
+    if (a1) { emit(cg, ", "); gen_conv(cg, mt->key_type, a1); }
+    if (id == 13) { emit(cg, ", "); gen_conv(cg, mt->elem_type, a2); }
+    emitf(cg, ", %d)", n->line);
+    if (id == 11) { emit(cg, " = "); gen_conv(cg, mt->elem_type, a2); emit(cg, ")"); }
+}
+
 static void gen_mcall(CodeGen *cg, Node *n) {
     Method *m = n->mcall.resolved;
     Node *obj = n->mcall.object;
+    if (n->mcall.builtin >= 11) { gen_map_call(cg, n); return; }
     if (n->mcall.builtin) { gen_list_call(cg, n); return; }
 
     if (!m) {                                         /* struct callback field */
@@ -834,6 +979,18 @@ static void gen_expr(CodeGen *cg, Node *n) {
             break;
 
         case NK_LIST_NEW: {
+            if (n->list_new.ltype->kind == TY_MAP) {
+                TypeInfo *mt = n->list_new.ltype;
+                const char *M = tfmt(cg, "tz_Map_%d", map_index(cg, mt));
+                emitf(cg, "({ %s *_l = %s_new(); ", M, M);
+                for (NodeList *a = n->list_new.items; a; a = a->next) {
+                    emitf(cg, "%s_insert(_l, ", M);
+                    gen_conv(cg, mt->key_type, a->node);
+                    emitf(cg, ", %d); ", n->line);
+                }
+                emit(cg, "_l; })");
+                break;
+            }
             TypeInfo *et = n->list_new.ltype->elem_type;
             const char *L = tfmt(cg, "tz_List_%d", list_index(cg, et));
             emitf(cg, "({ %s *_l = %s_new(); ", L, L);
@@ -858,6 +1015,14 @@ static void gen_expr(CodeGen *cg, Node *n) {
         case NK_INDEX: {
             Node *a = n->index.array, *ix = n->index.index;
             TypeInfo *at = a->type;
+            if (at && at->kind == TY_MAP) {
+                emitf(cg, n->as_lvalue ? "(*tz_Map_%d_ref(" : "tz_Map_%d_get(", map_index(cg, at));
+                gen_expr(cg, a);
+                emit(cg, ", ");
+                gen_conv(cg, at->key_type, ix);
+                emitf(cg, n->as_lvalue ? ", %d))" : ", %d)", n->line);
+                break;
+            }
             if (at && at->kind == TY_LIST) {
                 emitf(cg, "(*tz_List_%d_at(", list_index(cg, at->elem_type));
                 gen_expr(cg, a);
@@ -1099,7 +1264,20 @@ static void gen_switch(CodeGen *cg, Node *n) {
     emit(cg, "}\n");
 }
 
+/* #line makes gdb, the C compiler and stack traces talk about the .tz file. */
+static void emit_line(CodeGen *cg, Node *n) {
+    if (!cg->lines || n->line <= 0) return;
+    const char *f = n->file ? n->file : cg->filename;
+    emitf(cg, "#line %d \"", n->line);
+    for (const char *p = f ? f : "?"; *p; p++) {
+        if (*p == '"' || *p == '\\') emit(cg, "\\");
+        if ((unsigned char)*p >= 0x20) emit_n(cg, p, 1);
+    }
+    emit(cg, "\"\n");
+}
+
 static void gen_stmt(CodeGen *cg, Node *n) {
+    if (n->kind != NK_BLOCK) emit_line(cg, n);
     switch (n->kind) {
         case NK_VAR_DECL: gen_var_decl(cg, n, false); break;
         case NK_BLOCK:    indent(cg); gen_block(cg, n); emit(cg, "\n"); break;
@@ -1184,6 +1362,13 @@ static void gen_stmt(CodeGen *cg, Node *n) {
                 emitf(cg, "%s = ", var);
                 if (cast) emitf(cg, "(%s)", decl_str(cg, et, ""));
                 emitf(cg, "*tz_List_%d_at(_c%d, _i%d, %d);\n", li, id, id, n->line);
+            } else if (ct->kind == TY_MAP) {
+                int mi = map_index(cg, ct);
+                emitf(cg, "tz_Map_%d *_c%d = ", mi, id);
+                gen_expr(cg, coll);
+                emitf(cg, "; long long _i%d; for (_i%d = 0; _i%d < tz_Map_%d_len(_c%d, %d); _i%d++) { ",
+                      id, id, id, mi, id, n->line, id);
+                emitf(cg, "%s = _c%d->keys[_i%d];\n", var, id, id);
             } else if (ct->kind == TY_STRING) {
                 emitf(cg, "const char *_c%d = ", id);
                 gen_expr(cg, coll);
@@ -1296,6 +1481,8 @@ static void gen_stmt(CodeGen *cg, Node *n) {
         case NK_EXPR_STMT:
             n->expr_stmt.expr = simplify(cg, n->expr_stmt.expr);
             indent(cg);
+            if (n->expr_stmt.expr->kind == NK_INDEX || n->expr_stmt.expr->kind == NK_MEMBER)
+                emit(cg, "(void)");              /* a bare read: silence -Wunused-value */
             gen_expr_stmt(cg, n->expr_stmt.expr);
             emit(cg, ";\n");
             break;
@@ -1526,8 +1713,10 @@ void codegen_init(CodeGen *cg, Arena *arena, const char *filename) {
     cg->checks = true;
     cg->uses_checks = false;
     cg->uses_throw = false;
+    cg->lines = false;
     strbuf_init(&cg->lists);
     cg->nlists = 0;
+    cg->nmaps = 0;
     cg->try_depth = cg->break_base = cg->cont_base = 0;
     cg->prog = NULL;
     cg->ret_type = NULL;
@@ -1793,6 +1982,7 @@ void codegen_generate(CodeGen *cg, Node *prog) {
             cg->ret_type = d->func_decl.ret_type ? d->func_decl.ret_type : &ty_void;
             cg->try_depth = cg->break_base = cg->cont_base = 0;
             emit(cg, "\n");
+            emit_line(cg, d);
             gen_func_header(cg, d);
             emit(cg, " ");
             if (!strcmp(d->func_decl.name, "main"))
@@ -1843,11 +2033,13 @@ void codegen_generate(CodeGen *cg, Node *prog) {
         strbuf_append(&rt, RT_COMMON);
         strbuf_append(&rt, RT_GROW);
     }
-    if (cg->nlists) {
+    if (cg->nlists || cg->nmaps) {
         insert_at(cg, list_pos, cg->lists.data, "");
         StrBuf fw; strbuf_init(&fw);
         for (int i = 0; i < cg->nlists; i++)
             strbuf_appendf(&fw, "typedef struct tz_List_%d tz_List_%d;\n", i, i);
+        for (int i = 0; i < cg->nmaps; i++)
+            strbuf_appendf(&fw, "typedef struct tz_Map_%d tz_Map_%d;\n", i, i);
         strbuf_append(&fw, "\n");
         insert_at(cg, rt_pos, fw.data, "");
         strbuf_free(&fw);

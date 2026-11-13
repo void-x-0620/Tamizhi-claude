@@ -38,10 +38,12 @@ typedef struct {
     bool        uses_heap;   /* out: the program allocates (needs -lgc if gc)  */
     bool        checks;      /* in:  emit null / bounds / divide-by-zero checks */
     bool        uses_checks; /* out: a check helper was emitted                */
+    bool        lines;       /* in:  emit #line directives for debuggers      */
     bool        uses_throw;  /* out: try/catch/throw needs the frame runtime  */
     int         try_depth, break_base, cont_base;   /* active try frames     */
     StrBuf      lists;       /* C definitions of the List<T> instances used    */
-    int         nlists;
+    int         nlists, nmaps;
+    const char *map_keys[256];
     const char *list_keys[256];
     Node       *prog;        /* the program being generated                    */
     TypeInfo   *ret_type;    /* return type of the function being generated    */

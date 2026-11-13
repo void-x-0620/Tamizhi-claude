@@ -1,4 +1,4 @@
-# Tamizhi 2.2 — complete syntax reference
+# Tamizhi 2.3 — complete syntax reference
 
 Tamizhi is compiled to C99/GNU C and then to a native binary. Keywords are
 Tanglish (Tamil written in English letters). Every example below compiles.
@@ -67,6 +67,7 @@ type ::= primitive | Name | 'seyal' '(' [type {',' type}] ')' [':' type]
 | `T[N]` | `T a[N]` | fixed array; `int[2][3]` is 2 rows of 3 (like C) |
 | `seyal(A, B): R` | `R (*)(A, B)` | function pointer |
 | `List<T>` | growable list (heap) | section 8 |
+| `Map<K,V>` `Set<T>` | insertion-ordered hash map / set (heap) | section 10 |
 | struct / union / enum / class / alias names | | declared in section 4 |
 
 Conversions: widening is implicit (`i16 → i32`, `int → float`, `f32 → float`).
@@ -265,9 +266,34 @@ unreachable code after `kudu`/`udai`/`thodar`/`erivi`, and an assignment used as
 Options: `--no-warn`, `-Werror`, `--color=auto|always|never` (`NO_COLOR` is honoured).
 At most 20 errors are shown, then the compiler stops.
 
-## 10. Not supported (on purpose or yet)
+## 10. Version 2.3: Map, Set, debug info, hardening
 
-`goto`, bit-fields, the comma operator, inline assembly, interfaces, `Map`/user generics, closures (lambdas cannot capture locals), `finally`, constructor/method overloading, multiple inheritance, generics,
+```
+edu ages = puthu Map<string, int>();        # created empty
+ages.put("asha", 31);   ages["ravi"] = 27;  # insert / overwrite
+ages["asha"] += 1;      ages["n"] += 5;     # a missing key starts at 0 (or false / illai) when written
+edu a = ages["asha"];   ages.get_or("zed", -1);   # reading a missing key is a runtime error (catchable)
+ages.has("ravi");  ages.remove("ravi");  ages.clear();  ages.length;
+edu ks = ages.keys();   edu vs = ages.values();         # new List<K> / List<V>
+ovvoru (edu k ulle ages) { pathi("%s\n", k); }           # keys, in insertion order
+
+edu seen = puthu Set<int>(3, 1, 3);         # initial items are optional
+seen.add(9);  seen.has(1);  seen.remove(3);  seen.items();  seen.length
+```
+Keys are integers, `char`, `bool`, enums or strings. Map values can be any type except arrays, function
+types and `void`. `add` and `remove` return `bool` (was it new / was it present). Iteration order is insertion
+order, so output is deterministic.
+
+**Debug info:** `-g` (or `--lines`) emits `#line` directives, so gdb, valgrind and C compiler messages
+refer to your `.tz` file and line numbers.
+
+**Hardening:** nesting deeper than 1000 levels is reported as an error instead of crashing the compiler,
+the compiler runs on a 1 GiB stack so very long expressions work, and `make fuzz` runs mutation fuzzing
+(ASan build) plus a constant-folding-versus-runtime differential test.
+
+## 11. Not supported (on purpose or yet)
+
+`goto`, bit-fields, the comma operator, inline assembly, interfaces, user generics, closures (lambdas cannot capture locals), `finally`, constructor/method overloading, multiple inheritance, generics,
 pointer-to-const (`nilai` applies to the variable itself), `nilai` struct/class
 fields, nested/local type declarations, variadic user functions, and unchecked
 downcast safety. C evaluates function arguments in an unspecified order, so do

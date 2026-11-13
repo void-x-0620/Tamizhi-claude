@@ -20,6 +20,9 @@ static Node *parse_switch_stmt(Parser *p);
 static Node *parse_ternary(Parser *p);
 static Node *parse_import(Parser *p);
 static Node *parse_extern(Parser *p);
+#define MAX_NEST 1000
+static void nest_abort(Parser *p);
+
 static Node *parse_block(Parser *p);
 static Node *parse_stmt(Parser *p);
 static Node *parse_if_stmt(Parser *p);
@@ -36,6 +39,15 @@ static TypeInfo *parse_type(Parser *p);
 
 /* ─── Token helpers ────────────────────────────────────────────────────── */
 static Token peek(Parser *p)    { return lexer_peek(p->lexer); }
+static void nest_abort(Parser *p) {
+    Token t = peek(p);
+    report_error(p->lexer->filename, t.line, t.col,
+                 "code is nested too deeply (limit %d levels)", MAX_NEST);
+    fprintf(stderr, "1 error(s) found; nothing was compiled\n");
+    exit(1);
+}
+
+
 static bool  check(Parser *p, TokenType t) { return peek(p).type == t; }
 
 static Token advance(Parser *p) {
@@ -127,6 +139,7 @@ void parser_init(Parser *p, Lexer *L, Arena *arena) {
     p->binding = false;
     p->saw_header = false;
     p->lam_head = p->lam_tail = NULL;
+    p->nest = 0;
     ast_current_file = L->filename;
     p->imports = arena_alloc(arena, sizeof(ImportSet));
     memset(p->imports, 0, sizeof *p->imports);
@@ -494,6 +507,45 @@ static Node *parse_var_decl(Parser *p, int quals) {
 
 /* type ::= (IDENT | 'seyal' '(' [type (',' type)*] ')' [':' type])
  *           ('*' | '[' [INT] ']')*                                           */
+/* List<T>, Set<T> and Map<K,V> (the name token is already consumed). */
+static void close_angle(Parser *p) {
+    if (check(p, TOK_SHR)) {                /* List<List<int>>: split '>>' */
+        p->lexer->peeked.type = TOK_GT;
+        p->lexer->peeked.start++;
+        p->lexer->peeked.length--;
+        p->lexer->peeked.col++;
+    } else {
+        expect(p, TOK_GT);
+    }
+}
+
+static TypeInfo *parse_collection_type(Parser *p, Token name) {
+    if (name.type != TOK_IDENT || !check(p, TOK_LT)) return NULL;
+    bool list = name.length == 4 && !memcmp(name.start, "List", 4);
+    bool set  = name.length == 3 && !memcmp(name.start, "Set", 3);
+    bool map  = name.length == 3 && !memcmp(name.start, "Map", 3);
+    if (!list && !set && !map) return NULL;
+    advance(p);
+    TypeInfo *first = parse_type(p), *t;
+    if (map) {
+        expect(p, TOK_COMMA);
+        TypeInfo *val = parse_type(p);
+        t = type_new(p->arena, TY_MAP);
+        t->key_type = first;
+        t->elem_type = val;
+    } else if (set) {
+        t = type_new(p->arena, TY_MAP);
+        t->key_type = first;
+        t->elem_type = &ty_bool;
+        t->is_set = true;
+    } else {
+        t = type_new(p->arena, TY_LIST);
+        t->elem_type = first;
+    }
+    close_angle(p);
+    return t;
+}
+
 static TypeInfo *parse_type(Parser *p) {
     Token tok = peek(p);
     TypeInfo *base;
@@ -520,21 +572,9 @@ static TypeInfo *parse_type(Parser *p) {
     } else {
         advance(p);
         base = builtin_type(tok.start, tok.length);
-        if (!base && tok.length == 4 && !memcmp(tok.start, "List", 4) &&
-            check(p, TOK_LT)) {            /* List<T> */
-            advance(p);
-            TypeInfo *elem = parse_type(p);
-            Token cur = peek(p);
-            if (cur.type == TOK_SHR) {     /* List<List<int>>: split '>>' */
-                p->lexer->peeked.type = TOK_GT;
-                p->lexer->peeked.start++;
-                p->lexer->peeked.length--;
-                p->lexer->peeked.col++;
-            } else {
-                expect(p, TOK_GT);
-            }
-            base = type_new(p->arena, TY_LIST);
-            base->elem_type = elem;
+        TypeInfo *coll = base ? NULL : parse_collection_type(p, tok);
+        if (coll) {
+            base = coll;
         } else if (!base) {                /* struct, enum, class or alias */
             base = type_new(p->arena, TY_STRUCT);
             base->struct_name = lexeme(p, tok);
@@ -734,7 +774,14 @@ static Node *parse_class_decl(Parser *p) {
 }
 
 /* ─── Statements ───────────────────────────────────────────────────────── */
+static Node *parse_block_inner(Parser *p);
 static Node *parse_block(Parser *p) {
+    if (++p->nest > MAX_NEST) nest_abort(p);
+    Node *r = parse_block_inner(p);
+    p->nest--;
+    return r;
+}
+static Node *parse_block_inner(Parser *p) {
     Token lb = expect(p, TOK_LBRACE);
     Node *blk = node_new(p->arena, NK_BLOCK, lb.line, lb.col);
     NodeListBuilder b = {0};
@@ -758,7 +805,14 @@ static Node *parse_block(Parser *p) {
     return blk;
 }
 
+static Node *parse_stmt_inner(Parser *p);
 static Node *parse_stmt(Parser *p) {
+    if (++p->nest > MAX_NEST) nest_abort(p);
+    Node *r = parse_stmt_inner(p);
+    p->nest--;
+    return r;
+}
+static Node *parse_stmt_inner(Parser *p) {
     Token tok = peek(p);
     switch (tok.type) {
         case TOK_EDU: {
@@ -1165,7 +1219,14 @@ static NodeList *parse_call_args(Parser *p) {
 /* unary ::= ('-' | '!' | '~' | '&' | '*') unary | ('++' | '--') unary
  *         | 'maatru' '(' expr ',' type ')' | 'alavu' '(' (type | expr) ')'
  *         | 'puthu' IDENT '(' args ')' | postfix                            */
+static Node *parse_unary_inner(Parser *p);
 static Node *parse_unary(Parser *p) {
+    if (++p->nest > MAX_NEST) nest_abort(p);
+    Node *r = parse_unary_inner(p);
+    p->nest--;
+    return r;
+}
+static Node *parse_unary_inner(Parser *p) {
     Token t = peek(p);
     switch (t.type) {
         case TOK_MINUS: case TOK_BANG: case TOK_TILDE: case TOK_AMP: case TOK_STAR: {
@@ -1215,21 +1276,10 @@ static Node *parse_unary(Parser *p) {
         case TOK_PUTHU: {
             advance(p);
             Token name = expect(p, TOK_IDENT);
-            if (name.type == TOK_IDENT && name.length == 4 &&
-                !memcmp(name.start, "List", 4) && check(p, TOK_LT)) {
-                advance(p);
-                TypeInfo *elem = parse_type(p);
-                if (check(p, TOK_SHR)) {
-                    p->lexer->peeked.type = TOK_GT;
-                    p->lexer->peeked.start++;
-                    p->lexer->peeked.length--;
-                    p->lexer->peeked.col++;
-                } else {
-                    expect(p, TOK_GT);
-                }
+            TypeInfo *ct = parse_collection_type(p, name);
+            if (ct) {
                 Node *ln = node_new(p->arena, NK_LIST_NEW, t.line, t.col);
-                ln->list_new.ltype = type_new(p->arena, TY_LIST);
-                ln->list_new.ltype->elem_type = elem;
+                ln->list_new.ltype = ct;
                 ln->list_new.items = parse_call_args(p);
                 return ln;
             }

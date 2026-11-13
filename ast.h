@@ -18,13 +18,16 @@ typedef enum {
     TY_CLASS,       /* vagupu: a reference to a heap object             */
     TY_FUNC,        /* seyal(T, ...) : R   — pointer to a function      */
     TY_NULL,        /* the type of 'illai'                              */
+    TY_MAP,         /* Map<K,V> / Set<T> (is_set): insertion-ordered hash table */
     TY_LIST,        /* List<T>: growable array, a heap reference         */
 } TypeKind;
 
 typedef struct TypeInfo TypeInfo;
 struct TypeInfo {
     TypeKind    kind;
-    TypeInfo   *elem_type;     /* TY_ARRAY, TY_POINTER                      */
+    TypeInfo   *elem_type;     /* TY_ARRAY, TY_POINTER, TY_LIST, TY_MAP value */
+    TypeInfo   *key_type;      /* TY_MAP key (the element type of a Set)    */
+    bool        is_set;        /* TY_MAP written as Set<T>                  */
     const char *struct_name;   /* TY_STRUCT/ENUM/CLASS name (or an alias)   */
     int         array_size;    /* TY_ARRAY: element count, -1 = unsized     */
     /* TY_INT / TY_FLOAT: every C arithmetic type is one of these kinds     */
@@ -155,6 +158,7 @@ struct Node {
     NodeKind  kind;
     int       line, col;
     const char *file;                   /* source file (differs for headers) */
+    bool      as_lvalue;                /* an index expression that is assigned to */
     bool      is_lambda;                /* a lifted seyal expression */
     TypeInfo *type;                     /* set by semantic analysis */
 

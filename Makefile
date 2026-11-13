@@ -18,14 +18,20 @@ HDRS     := tamizhi.h lexer.h ast.h parser.h sema.h codegen.h
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ -lm
+	$(CC) $(CFLAGS) -o $@ $^ -lm -lpthread
 
 %.o: %.c $(HDRS)
 	$(CC) $(WARN) $(CFLAGS) -c -o $@ $<
 
+# Robustness checks: mutation fuzzing (needs `make asan`) and folding-vs-runtime.
+fuzz: asan $(TARGET)
+	python3 tests/fuzz/folding.py 1
+	python3 tests/fuzz/folding.py 2
+	python3 tests/fuzz/fuzz.py 1 3000
+
 asan: $(SRCS) $(HDRS)
 	$(CC) $(WARN) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
-	    -o $(TARGET)-asan $(SRCS) -lm
+	    -o $(TARGET)-asan $(SRCS) -lm -lpthread
 
 # ── Tests ────────────────────────────────────────────────────────────────
 # BIN lets `make test BIN=./tamizhi-asan` run the suite under the sanitizers.
@@ -67,6 +73,13 @@ test: $(TARGET)
 	run "abstract classes" tests/v21/abstract.expected $(BIN) tests/v21/abstract.tz --no-gc -o $$tmp/out; \
 	run "lambdas" tests/v21/lambda.expected $(BIN) tests/v21/lambda.tz --no-gc -o $$tmp/out; \
 	run "standard library" tests/v21/stdlib.expected $(BIN) tests/v21/stdlib.tz --no-gc -o $$tmp/out; \
+	run "Map and Set" tests/v21/map.expected $(BIN) tests/v21/map.tz --no-gc -o $$tmp/out; \
+	printf "  %-24s" "deep nesting rejected"; \
+	awk 'BEGIN{printf "seyal main(): int { kudu "; for(i=0;i<5000;i++)printf "("; printf "1"; for(i=0;i<5000;i++)printf ")"; print "; }"}' > $$tmp/deep.tz; \
+	if $(BIN) $$tmp/deep.tz -S 2>&1 | grep -q "nested too deeply"; then echo "PASS"; pass=$$((pass+1)); else echo "FAIL"; fail=$$((fail+1)); fi; \
+	printf "  %-24s" "long sum compiles"; \
+	awk 'BEGIN{printf "seyal main(): int { edu x = 1"; for(i=0;i<100000;i++)printf "+1"; print "; pathi(\"%d\\n\", x); kudu 0; }"}' > $$tmp/sum.tz; \
+	if $(BIN) $$tmp/sum.tz --no-gc -o $$tmp/sum 2>/dev/null && [ "`$$tmp/sum`" = "100001" ]; then echo "PASS"; pass=$$((pass+1)); else echo "FAIL"; fail=$$((fail+1)); fi; \
 	run "range loop" tests/v21/range.expected $(BIN) tests/v21/range.tz --no-gc -o $$tmp/out; \
 	run "runtime: array bounds" tests/rt/bounds.expected $(BIN) tests/rt/bounds.tz --no-gc -o $$tmp/out; \
 	run "runtime: divide by zero" tests/rt/divzero.expected $(BIN) tests/rt/divzero.tz --no-gc -o $$tmp/out; \
